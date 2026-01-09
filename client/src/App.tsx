@@ -3,14 +3,45 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ThemeProvider } from "@/lib/theme-context";
+import { AuthProvider } from "@/lib/auth-context";
+import { Navigation } from "@/components/navigation";
+import { Footer } from "@/components/footer";
+import HomePage from "@/pages/home";
+import LoginPage from "@/pages/login";
+import RegisterPage from "@/pages/register";
+import VerifyEmailPage from "@/pages/verify-email";
+import DashboardPage from "@/pages/dashboard";
+import AnalyticsPage from "@/pages/analytics";
+import QrCodesPage from "@/pages/qr-codes";
+import BlogPage from "@/pages/blog";
+import BlogPostPage from "@/pages/blog-post";
+import AdminPage from "@/pages/admin/index";
+import BlogEditorPage from "@/pages/admin/blog-editor";
+import SponsorDetailPage from "@/pages/sponsor-detail";
+import PrivacyPage from "@/pages/privacy";
+import TermsPage from "@/pages/terms";
+import ContactPage from "@/pages/contact";
 import NotFound from "@/pages/not-found";
 
 function Router() {
   return (
     <Switch>
-      {/* Add pages below */}
-      {/* <Route path="/" component={Home}/> */}
-      {/* Fallback to 404 */}
+      <Route path="/" component={HomePage} />
+      <Route path="/login" component={LoginPage} />
+      <Route path="/register" component={RegisterPage} />
+      <Route path="/verify-email" component={VerifyEmailPage} />
+      <Route path="/dashboard" component={DashboardPage} />
+      <Route path="/analytics" component={AnalyticsPage} />
+      <Route path="/qr-codes" component={QrCodesPage} />
+      <Route path="/blog" component={BlogPage} />
+      <Route path="/blog/:slug" component={BlogPostPage} />
+      <Route path="/admin" component={AdminPage} />
+      <Route path="/admin/blog/:id" component={BlogEditorPage} />
+      <Route path="/sponsor/:id" component={SponsorDetailPage} />
+      <Route path="/privacy" component={PrivacyPage} />
+      <Route path="/terms" component={TermsPage} />
+      <Route path="/contact" component={ContactPage} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -19,10 +50,20 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Router />
-      </TooltipProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <TooltipProvider>
+            <div className="min-h-screen flex flex-col">
+              <Navigation />
+              <main className="flex-1">
+                <Router />
+              </main>
+              <Footer />
+            </div>
+            <Toaster />
+          </TooltipProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }
