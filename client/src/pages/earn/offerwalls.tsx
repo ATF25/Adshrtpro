@@ -6,68 +6,39 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ExternalLink, AlertCircle, DollarSign, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { Link } from "wouter";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 const OFFERWALL_CONFIG = {
   cpagrip: {
     name: "CPAGrip",
     description: "Complete surveys and offers to earn rewards",
     color: "bg-blue-500",
-    getUrl: (userId: string) => `https://www.cpagrip.com/common/offer_feed_json.php?user_id=621093&key=35b59eb1af2454f46fe63ad7d34f923b&tracking_id=${userId}&domain=singingfiles.com`,
-    hasEmbed: true,
   },
   adbluemedia: {
     name: "AdBlueMedia",
     description: "High-paying offers and downloads",
     color: "bg-purple-500",
-    getUrl: (userId: string) => `https://d2xohqmdyl2cj3.cloudfront.net/public/offers/feed.php?user_id=518705&api_key=f24063d0d801e4daa846e9da4454c467&s1=${userId}&s2=`,
-    hasEmbed: false,
   },
 };
 
-function CPAGripEmbed() {
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!containerRef.current) return;
-
-    const script1 = document.createElement("script");
-    script1.type = "text/javascript";
-    script1.textContent = "var lck = false;";
-    containerRef.current.appendChild(script1);
-
-    const script2 = document.createElement("script");
-    script2.type = "text/javascript";
-    script2.src = "https://singingfiles.com/script_include.php?id=1801017";
-    script2.async = true;
-    containerRef.current.appendChild(script2);
-
-    return () => {
-      if (containerRef.current) {
-        containerRef.current.innerHTML = "";
-      }
-    };
-  }, []);
-
-  return (
-    <div className="min-h-[400px] bg-card rounded-lg border p-4">
-      <div ref={containerRef} className="offerwall-container" />
-    </div>
-  );
-}
-
-interface AdBlueOffer {
+interface Offer {
   id: string;
+  offerid?: string;
   name: string;
-  anchor: string;
-  conversion: string;
+  title?: string;
+  anchor?: string;
+  description?: string;
+  conversion?: string;
   payout: string;
+  amount?: string;
   url: string;
-  network_icon: string;
+  link?: string;
+  network_icon?: string;
+  image?: string;
 }
 
-function AdBlueMediaOffers({ userId }: { userId: string }) {
-  const [offers, setOffers] = useState<AdBlueOffer[]>([]);
+function OfferwallOffers({ userId, network }: { userId: string; network: "cpagrip" | "adbluemedia" }) {
+  const [offers, setOffers] = useState<Offer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -75,7 +46,7 @@ function AdBlueMediaOffers({ userId }: { userId: string }) {
     const fetchOffers = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`/api/offerwalls/adbluemedia/offers?userId=${userId}`);
+        const response = await fetch(`/api/offerwalls/${network}/offers?userId=${userId}`);
         if (!response.ok) throw new Error("Failed to fetch offers");
         const data = await response.json();
         setOffers(data);
@@ -86,7 +57,7 @@ function AdBlueMediaOffers({ userId }: { userId: string }) {
       }
     };
     fetchOffers();
-  }, [userId]);
+  }, [userId, network]);
 
   if (loading) {
     return (
@@ -114,32 +85,41 @@ function AdBlueMediaOffers({ userId }: { userId: string }) {
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-      {offers.map((offer) => (
-        <Card key={offer.id} className="hover-elevate">
-          <CardContent className="pt-4">
-            <div className="flex items-start gap-3">
-              {offer.network_icon && (
-                <img src={offer.network_icon} alt="" className="w-12 h-12 rounded object-cover" />
-              )}
-              <div className="flex-1 min-w-0">
-                <h4 className="font-medium text-sm line-clamp-2">{offer.name}</h4>
-                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{offer.anchor}</p>
+      {offers.map((offer, index) => {
+        const offerId = offer.id || offer.offerid || `offer-${index}`;
+        const offerName = offer.name || offer.title || "Offer";
+        const offerDesc = offer.anchor || offer.description || offer.conversion || "";
+        const offerPayout = offer.payout || offer.amount || "0";
+        const offerUrl = offer.url || offer.link || "#";
+        const offerImage = offer.network_icon || offer.image;
+
+        return (
+          <Card key={offerId} className="hover-elevate">
+            <CardContent className="pt-4">
+              <div className="flex items-start gap-3">
+                {offerImage && (
+                  <img src={offerImage} alt="" className="w-12 h-12 rounded object-cover" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-medium text-sm line-clamp-2">{offerName}</h4>
+                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{offerDesc}</p>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center justify-between mt-4">
-              <Badge variant="secondary" className="gap-1">
-                <DollarSign className="h-3 w-3" />
-                {parseFloat(offer.payout).toFixed(2)}
-              </Badge>
-              <a href={offer.url} target="_blank" rel="noopener noreferrer">
-                <Button size="sm" data-testid={`button-offer-${offer.id}`}>
-                  Complete
-                </Button>
-              </a>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+              <div className="flex items-center justify-between mt-4">
+                <Badge variant="secondary" className="gap-1">
+                  <DollarSign className="h-3 w-3" />
+                  {parseFloat(offerPayout).toFixed(2)}
+                </Badge>
+                <a href={offerUrl} target="_blank" rel="noopener noreferrer">
+                  <Button size="sm" data-testid={`button-offer-${offerId}`}>
+                    Complete
+                  </Button>
+                </a>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })}
     </div>
   );
 }
@@ -247,21 +227,8 @@ export default function OfferwallsPage() {
                       Complete offers from {config.name} to earn USD. Rewards are credited automatically.
                     </p>
                     
-                    {key === "cpagrip" ? (
-                      <CPAGripEmbed />
-                    ) : key === "adbluemedia" ? (
-                      <AdBlueMediaOffers userId={user.id} />
-                    ) : (
-                      <a 
-                        href={config.getUrl(user.id)} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                      >
-                        <Button className="w-full" data-testid={`button-offerwall-${key}`}>
-                          <ExternalLink className="mr-2 h-4 w-4" />
-                          View Offers
-                        </Button>
-                      </a>
+                    {(key === "cpagrip" || key === "adbluemedia") && (
+                      <OfferwallOffers userId={user.id} network={key as "cpagrip" | "adbluemedia"} />
                     )}
                   </CardContent>
                 </Card>

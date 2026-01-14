@@ -1084,6 +1084,48 @@ export async function registerRoutes(
     }
   });
 
+  // Get CPAGrip offers (proxy to avoid CORS) - with geo-location targeting
+  app.get("/api/offerwalls/cpagrip/offers", requireAuth, async (req, res) => {
+    try {
+      const { userId } = req.query;
+      if (!userId) {
+        return res.status(400).json({ message: "userId required" });
+      }
+
+      const setting = await storage.getOfferwallSetting("cpagrip");
+      if (!setting?.isEnabled) {
+        return res.json([]);
+      }
+
+      // Get user's IP for geo-targeting
+      const userIp = req.headers["x-forwarded-for"] || req.headers["x-real-ip"] || req.socket.remoteAddress || "";
+      const clientIp = Array.isArray(userIp) ? userIp[0] : userIp.split(",")[0].trim();
+
+      // CPAGrip JSON feed with IP parameter for geo-targeting
+      const feedUrl = `https://www.cpagrip.com/common/offer_feed_json.php?user_id=621093&key=35b59eb1af2454f46fe63ad7d34f923b&tracking_id=${userId}&domain=singingfiles.com&ip=${encodeURIComponent(clientIp)}`;
+      
+      const response = await fetch(feedUrl);
+      if (!response.ok) {
+        throw new Error("Failed to fetch offers");
+      }
+      
+      const data = await response.json();
+      const offers = data.offers || data || [];
+      
+      // Apply 50% revenue split - show users their actual earnings
+      const adjustedOffers = (Array.isArray(offers) ? offers : []).map((offer: any) => ({
+        ...offer,
+        payout: (parseFloat(offer.payout || offer.amount || "0") * 0.5).toFixed(2),
+        original_payout: offer.payout || offer.amount,
+      }));
+      
+      res.json(adjustedOffers);
+    } catch (error) {
+      console.error("CPAGrip offers fetch error:", error);
+      res.status(500).json({ message: "Failed to fetch offers" });
+    }
+  });
+
   // CPAGrip postback handler
   app.get("/api/postback/cpagrip", async (req, res) => {
     const { user_id, offer_id, payout, transaction_id, ip, secret } = req.query;
