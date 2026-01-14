@@ -154,7 +154,7 @@ export interface IStorage {
   getTaskSubmissionsByTask(taskId: string): Promise<TaskSubmission[]>;
   getAllTaskSubmissions(): Promise<TaskSubmission[]>;
   getPendingTaskSubmissions(): Promise<TaskSubmission[]>;
-  createTaskSubmission(taskId: string, userId: string, proofData: string): Promise<TaskSubmission>;
+  createTaskSubmission(taskId: string, userId: string, proofData: string, proofUrl?: string, proofText?: string, screenshotLinks?: string): Promise<TaskSubmission>;
   updateTaskSubmission(id: string, data: Partial<TaskSubmission>): Promise<TaskSubmission | undefined>;
   updateTaskSubmissionIfPending(id: string, data: Partial<TaskSubmission>): Promise<{ updated: boolean; submission: TaskSubmission | undefined }>;
   approveTaskSubmissionWithLock(submissionId: string, taskId: string, userId: string, data: Partial<TaskSubmission>, maxCompletions: number | null, rewardUsd: number, taskTitle: string): Promise<{ success: boolean; error?: string; submission?: TaskSubmission }>;
@@ -1223,13 +1223,16 @@ export class MemStorage implements IStorage {
       });
   }
 
-  async createTaskSubmission(taskId: string, userId: string, proofData: string): Promise<TaskSubmission> {
+  async createTaskSubmission(taskId: string, userId: string, proofData: string, proofUrl?: string, proofText?: string, screenshotLinks?: string): Promise<TaskSubmission> {
     const id = randomUUID();
     const submission: TaskSubmission = {
       id,
       taskId,
       userId,
       proofData,
+      proofUrl: proofUrl || null,
+      proofText: proofText || null,
+      screenshotLinks: screenshotLinks || null,
       status: "pending",
       adminNotes: null,
       submittedAt: new Date(),

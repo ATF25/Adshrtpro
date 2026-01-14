@@ -1258,10 +1258,17 @@ export async function registerRoutes(
   app.post("/api/tasks/:id/submit", requireAuth, async (req, res) => {
     const taskId = req.params.id;
     const userId = req.session.userId!;
-    const { proofData } = req.body;
+    const { proofData, proofUrl, proofText, screenshotLinks } = req.body;
 
-    if (!proofData) {
-      return res.status(400).json({ message: "Proof is required" });
+    // Trim inputs and check for actual content
+    const trimmedProofUrl = proofUrl?.trim() || "";
+    const trimmedProofText = proofText?.trim() || "";
+    const trimmedScreenshotLinks = screenshotLinks?.trim() || "";
+    const trimmedProofData = proofData?.trim() || "";
+
+    // At least one proof field must be provided with actual content
+    if (!trimmedProofData && !trimmedProofUrl && !trimmedProofText && !trimmedScreenshotLinks) {
+      return res.status(400).json({ message: "Proof is required. Please provide at least one of: link, text, or screenshot links." });
     }
 
     // Check if task exists and is active
@@ -1276,7 +1283,17 @@ export async function registerRoutes(
       return res.status(400).json({ message: "You have already submitted this task" });
     }
 
-    const submission = await storage.createTaskSubmission(taskId, userId, proofData);
+    // Build combined proofData for backward compatibility
+    const combinedProofData = trimmedProofData || [trimmedProofUrl, trimmedProofText, trimmedScreenshotLinks].filter(Boolean).join(" | ");
+    
+    const submission = await storage.createTaskSubmission(
+      taskId, 
+      userId, 
+      combinedProofData,
+      trimmedProofUrl || null,
+      trimmedProofText || null,
+      trimmedScreenshotLinks || null
+    );
     res.status(201).json(submission);
   });
 
@@ -1582,12 +1599,14 @@ export async function registerRoutes(
   // Admin: Get all withdrawals
   app.get("/api/admin/withdrawals", requireAdmin, async (req, res) => {
     const withdrawals = await storage.getAllWithdrawalRequests();
-    // Enrich with user info
+    // Enrich with user info including username and FaucetPay email
     const enriched = await Promise.all(withdrawals.map(async (w) => {
       const user = await storage.getUser(w.userId);
       return {
         ...w,
-        userEmail: user?.email,
+        userName: user?.username || user?.email?.split("@")[0] || "Unknown",
+        userEmail: user?.email || "No email",
+        userFaucetPayEmail: user?.faucetpayEmail || w.faucetpayEmail || "Not set",
       };
     }));
     res.json(enriched);
@@ -1597,7 +1616,10 @@ export async function registerRoutes(
   app.patch("/api/admin/withdrawals/:id", requireAdmin, async (req, res) => {
     const { status, txHash, adminNotes } = req.body;
     
-    if (!["approved", "rejected", "paid"].includes(status)) {
+    // Accept both "completed" (frontend) and "approved"/"paid" (legacy)
+    const normalizedStatus = status === "completed" ? "paid" : status;
+    
+    if (!["approved", "rejected", "paid"].includes(normalizedStatus)) {
       return res.status(400).json({ message: "Invalid status" });
     }
 
@@ -1611,7 +1633,7 @@ export async function registerRoutes(
     }
 
     // If rejecting, refund the balance
-    if (status === "rejected" && withdrawal.status === "pending") {
+    if (normalizedStatus === "rejected" && withdrawal.status === "pending") {
       await storage.creditBalance(
         withdrawal.userId,
         withdrawal.amountUsd,
@@ -1621,13 +1643,13 @@ export async function registerRoutes(
     }
 
     await storage.updateWithdrawalRequest(req.params.id, {
-      status,
+      status: normalizedStatus,
       txHash,
       adminNotes,
       processedAt: new Date(),
     });
 
-    res.json({ message: `Withdrawal ${status}` });
+    res.json({ message: `Withdrawal ${normalizedStatus}` });
   });
 
   // Admin: Get/update offerwall settings

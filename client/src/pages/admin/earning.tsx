@@ -499,26 +499,31 @@ export default function AdminEarningPage() {
                         <TableHead>User</TableHead>
                         <TableHead>Amount</TableHead>
                         <TableHead>Coin</TableHead>
-                        <TableHead>Address</TableHead>
+                        <TableHead>FaucetPay Email</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {withdrawals.map((withdrawal) => (
+                      {withdrawals.map((withdrawal: any) => (
                         <TableRow key={withdrawal.id}>
-                          <TableCell>{withdrawal.userId}</TableCell>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{withdrawal.userName || "Unknown"}</p>
+                              <p className="text-xs text-muted-foreground">{withdrawal.userEmail}</p>
+                            </div>
+                          </TableCell>
                           <TableCell className="font-medium">${withdrawal.amountUsd}</TableCell>
                           <TableCell>
-                            <Badge variant="outline">{withdrawal.coin}</Badge>
+                            <Badge variant="outline">{withdrawal.coinType}</Badge>
                           </TableCell>
-                          <TableCell className="max-w-[200px] truncate font-mono text-sm">
-                            {withdrawal.walletAddress}
+                          <TableCell className="max-w-[200px] truncate text-sm">
+                            {withdrawal.userFaucetPayEmail || withdrawal.faucetpayEmail || "Not set"}
                           </TableCell>
                           <TableCell>
                             <Badge
                               variant={
-                                withdrawal.status === "completed"
+                                withdrawal.status === "paid" || withdrawal.status === "completed"
                                   ? "default"
                                   : withdrawal.status === "rejected"
                                   ? "destructive"
@@ -540,6 +545,7 @@ export default function AdminEarningPage() {
                                       status: "completed",
                                     })
                                   }
+                                  disabled={processWithdrawalMutation.isPending}
                                   data-testid={`button-approve-withdrawal-${withdrawal.id}`}
                                 >
                                   <Check className="w-4 h-4 text-green-500" />
@@ -553,6 +559,7 @@ export default function AdminEarningPage() {
                                       status: "rejected",
                                     })
                                   }
+                                  disabled={processWithdrawalMutation.isPending}
                                   data-testid={`button-reject-withdrawal-${withdrawal.id}`}
                                 >
                                   <X className="w-4 h-4 text-destructive" />
@@ -833,7 +840,7 @@ export default function AdminEarningPage() {
         </Dialog>
 
         <Dialog open={!!submissionViewOpen} onOpenChange={() => setSubmissionViewOpen(null)}>
-          <DialogContent>
+          <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle>Submission Details</DialogTitle>
             </DialogHeader>
@@ -841,15 +848,50 @@ export default function AdminEarningPage() {
               <div className="space-y-4">
                 <div>
                   <Label className="text-muted-foreground">User ID</Label>
-                  <p className="font-mono">{submissionViewOpen.userId}</p>
+                  <p className="font-mono text-sm">{submissionViewOpen.userId}</p>
                 </div>
                 <div>
-                  <Label className="text-muted-foreground">Proof URL</Label>
-                  <p className="font-mono break-all">{submissionViewOpen.proofUrl || "No URL provided"}</p>
+                  <Label className="text-muted-foreground">Profile/Post Link</Label>
+                  {(submissionViewOpen as any).proofUrl ? (
+                    <a 
+                      href={(submissionViewOpen as any).proofUrl} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline break-all block"
+                    >
+                      {(submissionViewOpen as any).proofUrl}
+                    </a>
+                  ) : (
+                    <p className="text-muted-foreground">No URL provided</p>
+                  )}
                 </div>
                 <div>
-                  <Label className="text-muted-foreground">Proof Text</Label>
-                  <p>{submissionViewOpen.proofText || "No text provided"}</p>
+                  <Label className="text-muted-foreground">Additional Information</Label>
+                  <p className="whitespace-pre-wrap">{(submissionViewOpen as any).proofText || "No text provided"}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">Screenshot Proof Links</Label>
+                  {(submissionViewOpen as any).screenshotLinks ? (
+                    <div className="space-y-1">
+                      {(submissionViewOpen as any).screenshotLinks.split(",").map((link: string, idx: number) => (
+                        <a 
+                          key={idx}
+                          href={link.trim()} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline break-all block text-sm"
+                        >
+                          {link.trim()}
+                        </a>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground">No screenshots provided</p>
+                  )}
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">Legacy Proof Data</Label>
+                  <p className="text-sm text-muted-foreground break-all">{submissionViewOpen.proofData || "N/A"}</p>
                 </div>
                 <div>
                   <Label className="text-muted-foreground">Status</Label>

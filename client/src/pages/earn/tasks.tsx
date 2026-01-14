@@ -35,7 +35,9 @@ export default function TasksPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [proofData, setProofData] = useState("");
+  const [proofUrl, setProofUrl] = useState("");
+  const [proofText, setProofText] = useState("");
+  const [screenshotLinks, setScreenshotLinks] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const { data: tasks = [], isLoading } = useQuery<Task[]>({
@@ -44,14 +46,16 @@ export default function TasksPage() {
   });
 
   const submitMutation = useMutation({
-    mutationFn: async ({ taskId, proofData }: { taskId: string; proofData: string }) => {
-      await apiRequest("POST", `/api/tasks/${taskId}/submit`, { proofData });
+    mutationFn: async ({ taskId, proofUrl, proofText, screenshotLinks }: { taskId: string; proofUrl: string; proofText: string; screenshotLinks: string }) => {
+      await apiRequest("POST", `/api/tasks/${taskId}/submit`, { proofUrl, proofText, screenshotLinks });
     },
     onSuccess: () => {
       toast({ title: "Task submitted!", description: "Your submission is pending review." });
       queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
       setDialogOpen(false);
-      setProofData("");
+      setProofUrl("");
+      setProofText("");
+      setScreenshotLinks("");
       setSelectedTask(null);
     },
     onError: (error: Error) => {
@@ -176,7 +180,9 @@ export default function TasksPage() {
                       setDialogOpen(open);
                       if (!open) {
                         setSelectedTask(null);
-                        setProofData("");
+                        setProofUrl("");
+                        setProofText("");
+                        setScreenshotLinks("");
                       }
                     }}>
                       <DialogTrigger asChild>
@@ -187,7 +193,7 @@ export default function TasksPage() {
                           Submit Proof
                         </Button>
                       </DialogTrigger>
-                      <DialogContent>
+                      <DialogContent className="max-w-md">
                         <DialogHeader>
                           <DialogTitle>Submit Task Proof</DialogTitle>
                           <DialogDescription>
@@ -196,35 +202,56 @@ export default function TasksPage() {
                         </DialogHeader>
                         <div className="space-y-4 py-4">
                           <div>
-                            <Label htmlFor="proof">{getProofLabel(task.proofType)}</Label>
-                            {task.proofType === "screenshot" ? (
-                              <div>
-                                <Input
-                                  id="proof"
-                                  placeholder="https://imgur.com/..."
-                                  value={proofData}
-                                  onChange={(e) => setProofData(e.target.value)}
-                                  data-testid="input-proof"
-                                />
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  Upload your screenshot to an image hosting service and paste the link here.
-                                </p>
-                              </div>
-                            ) : (
-                              <Input
-                                id="proof"
-                                placeholder={task.proofType === "link" ? "https://..." : "your_username"}
-                                value={proofData}
-                                onChange={(e) => setProofData(e.target.value)}
-                                data-testid="input-proof"
-                              />
-                            )}
+                            <Label htmlFor="proofUrl">Profile/Post Link</Label>
+                            <Input
+                              id="proofUrl"
+                              placeholder="https://example.com/your-profile"
+                              value={proofUrl}
+                              onChange={(e) => setProofUrl(e.target.value)}
+                              data-testid="input-proof-url"
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Paste the link to your profile or post here.
+                            </p>
+                          </div>
+                          
+                          <div>
+                            <Label htmlFor="proofText">Additional Information</Label>
+                            <Textarea
+                              id="proofText"
+                              placeholder="Your username, additional notes, or any other proof text..."
+                              value={proofText}
+                              onChange={(e) => setProofText(e.target.value)}
+                              data-testid="input-proof-text"
+                              className="min-h-[80px]"
+                            />
+                          </div>
+                          
+                          <div>
+                            <Label htmlFor="screenshotLinks">Screenshot Proof Links</Label>
+                            <Textarea
+                              id="screenshotLinks"
+                              placeholder="https://i.ibb.co/xxx, https://postimg.cc/xxx"
+                              value={screenshotLinks}
+                              onChange={(e) => setScreenshotLinks(e.target.value)}
+                              data-testid="input-screenshot-links"
+                              className="min-h-[60px]"
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Please submit your proof screenshots using imgbb.com or postimages.org.
+                              If you have more than one proof, put a comma between the links.
+                            </p>
                           </div>
                         </div>
                         <DialogFooter>
                           <Button
-                            onClick={() => task && submitMutation.mutate({ taskId: task.id, proofData })}
-                            disabled={!proofData || submitMutation.isPending}
+                            onClick={() => task && submitMutation.mutate({ 
+                              taskId: task.id, 
+                              proofUrl, 
+                              proofText,
+                              screenshotLinks 
+                            })}
+                            disabled={(!proofUrl && !proofText && !screenshotLinks) || submitMutation.isPending}
                             data-testid="button-confirm-submit"
                           >
                             {submitMutation.isPending ? "Submitting..." : "Submit"}

@@ -375,7 +375,10 @@ export const taskSubmissions = pgTable("task_submissions", {
   id: varchar("id", { length: 36 }).primaryKey(),
   taskId: varchar("task_id", { length: 36 }).notNull(),
   userId: varchar("user_id", { length: 36 }).notNull(),
-  proofData: text("proof_data").notNull(), // URL or text proof
+  proofData: text("proof_data").notNull(), // Legacy field for backward compatibility
+  proofUrl: text("proof_url"), // Link proof (profile URL, post URL, etc.)
+  proofText: text("proof_text"), // Text proof (username, description, etc.)
+  screenshotLinks: text("screenshot_links"), // Comma-separated screenshot URLs from imgbb.com or postimages.org
   status: text("status").default("pending"), // pending, approved, rejected
   adminNotes: text("admin_notes"),
   submittedAt: timestamp("submitted_at").defaultNow(),
