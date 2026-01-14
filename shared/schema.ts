@@ -28,7 +28,16 @@ export const insertUserSchema = createInsertSchema(users).pick({
 }).extend({
   email: z.string().email("Invalid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
-  telegramUsername: z.string().optional(),
+  telegramUsername: z.string()
+    .transform(val => val?.replace(/^@/, '').trim())
+    .pipe(
+      z.string()
+        .min(5, "Telegram username must be 5-32 characters")
+        .max(32, "Telegram username must be 5-32 characters")
+        .regex(/^[a-zA-Z0-9_]+$/, "Telegram username can only contain letters, numbers, and underscores")
+    )
+    .optional()
+    .or(z.literal('')),
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;

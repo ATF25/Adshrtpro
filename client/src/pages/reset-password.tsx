@@ -28,6 +28,7 @@ export default function ResetPasswordPage() {
   const search = useSearch();
   const params = new URLSearchParams(search);
   const token = params.get("token") || "";
+  const uid = params.get("uid") || "";
   const [success, setSuccess] = useState(false);
 
   const form = useForm<ResetPasswordInput>({
@@ -40,7 +41,7 @@ export default function ResetPasswordPage() {
 
   const mutation = useMutation({
     mutationFn: async (data: ResetPasswordInput) => {
-      const response = await apiRequest("POST", "/api/auth/reset-password", data);
+      const response = await apiRequest("POST", "/api/auth/reset-password", { ...data, uid });
       if (!response.ok) {
         const err = await response.json();
         throw new Error(err.message || "Failed to reset password");
@@ -67,7 +68,7 @@ export default function ResetPasswordPage() {
     mutation.mutate({ ...data, token });
   };
 
-  if (!token) {
+  if (!token || !uid) {
     return (
       <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center py-12 px-4">
         <div className="w-full max-w-md">

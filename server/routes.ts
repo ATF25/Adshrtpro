@@ -312,19 +312,20 @@ export async function registerRoutes(
         return res.json({ message: "If the email exists, a reset link has been sent." });
       }
 
-      // Generate reset token and set expiry (1 hour from now)
+      // Generate reset token and hash it for storage (security best practice)
       const resetToken = randomUUID();
+      const hashedToken = await bcrypt.hash(resetToken, 10);
       const resetExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
       await storage.updateUser(user.id, {
-        passwordResetToken: resetToken,
+        passwordResetToken: hashedToken,
         passwordResetExpiry: resetExpiry,
       });
 
-      // In production, send email with reset link
-      // For now, log the token
-      console.log(`Password reset token for ${user.email}: ${resetToken}`);
-      console.log(`Reset link: ${process.env.APP_URL || 'http://localhost:5000'}/reset-password?token=${resetToken}`);
+      // In production, this would send an email. For development, store userId for lookup
+      // The actual token is sent via email, only the hash is stored
+      console.log(`[DEV] Password reset requested for: ${user.email}`);
+      console.log(`[DEV] Reset link: ${process.env.APP_URL || 'http://localhost:5000'}/reset-password?token=${resetToken}&uid=${user.id}`);
 
       res.json({ message: "If the email exists, a reset link has been sent." });
     } catch (error) {
@@ -339,15 +340,32 @@ export async function registerRoutes(
   app.post("/api/auth/reset-password", async (req, res) => {
     try {
       const data = resetPasswordSchema.parse(req.body);
-      const user = await storage.getUserByPasswordResetToken(data.token);
+      const { uid } = req.body;
 
-      if (!user) {
+      if (!uid) {
+        return res.status(400).json({ message: "Invalid reset link" });
+      }
+
+      const user = await storage.getUser(uid);
+
+      if (!user || !user.passwordResetToken) {
         return res.status(400).json({ message: "Invalid or expired reset token" });
       }
 
-      // Check if token is expired
+      // Check if token is expired first
       if (!user.passwordResetExpiry || new Date() > user.passwordResetExpiry) {
-        return res.status(400).json({ message: "Reset token has expired" });
+        // Clear expired token
+        await storage.updateUser(user.id, {
+          passwordResetToken: null,
+          passwordResetExpiry: null,
+        });
+        return res.status(400).json({ message: "Reset token has expired. Please request a new one." });
+      }
+
+      // Verify the token hash
+      const tokenValid = await bcrypt.compare(data.token, user.passwordResetToken);
+      if (!tokenValid) {
+        return res.status(400).json({ message: "Invalid or expired reset token" });
       }
 
       // Hash new password and update user

@@ -321,7 +321,8 @@ export default function AdminPage() {
   }
 
   const filteredUsers = users?.filter(
-    (u) => u.email.toLowerCase().includes(searchUsers.toLowerCase())
+    (u) => u.email.toLowerCase().includes(searchUsers.toLowerCase()) ||
+      (u.telegramUsername && u.telegramUsername.toLowerCase().includes(searchUsers.toLowerCase()))
   );
 
   const filteredLinks = links?.filter(
@@ -422,6 +423,7 @@ export default function AdminPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Email</TableHead>
+                        <TableHead>Telegram</TableHead>
                         <TableHead>Verified</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Admin</TableHead>
@@ -432,6 +434,9 @@ export default function AdminPage() {
                       {filteredUsers?.map((u) => (
                         <TableRow key={u.id}>
                           <TableCell className="font-medium">{u.email}</TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {u.telegramUsername ? `@${u.telegramUsername}` : "-"}
+                          </TableCell>
                           <TableCell>
                             {u.emailVerified ? (
                               <Check className="w-4 h-4 text-green-500" />
