@@ -132,3 +132,16 @@ The app runs on port 5000 using `npm run dev`.
   - Admin Earning page has "Social" tab for reviewing verification submissions with approve/reject actions
   - Referrals page updated with clear requirements showing verification status and step-by-step guide
   - AuthUser interface extended with socialVerified field returned in all auth responses
+- Password Reset System:
+  - Forgot password page at /forgot-password for requesting reset email
+  - Reset password page at /reset-password for setting new password
+  - Secure token-based reset with hashed tokens stored (bcrypt)
+  - 1-hour token expiry with proper validation
+  - Reset links include uid parameter for secure token verification
+  - Console logging for development (no email service configured yet)
+- Telegram Username Integration:
+  - Optional telegramUsername field on user registration
+  - Profile page at /profile for viewing account info and editing Telegram username
+  - Telegram validation: 5-32 chars, alphanumeric + underscores only
+  - Admin panel displays Telegram usernames with search support
+  - Used for support and account verification purposes
