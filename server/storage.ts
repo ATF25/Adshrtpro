@@ -39,6 +39,7 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   getUserByVerificationToken(token: string): Promise<User | undefined>;
+  getUserByPasswordResetToken(token: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, data: Partial<User>): Promise<User | undefined>;
   getAllUsers(): Promise<User[]>;
@@ -361,6 +362,12 @@ export class MemStorage implements IStorage {
     );
   }
 
+  async getUserByPasswordResetToken(token: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find(
+      (user) => user.passwordResetToken === token
+    );
+  }
+
   private generateReferralCode(): string {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     let result = "";
@@ -396,6 +403,9 @@ export class MemStorage implements IStorage {
       referredBy: null,
       socialVerified: false,
       socialVerifiedAt: null,
+      telegramUsername: insertUser.telegramUsername || null,
+      passwordResetToken: null,
+      passwordResetExpiry: null,
       createdAt: new Date(),
     };
     this.users.set(id, user);

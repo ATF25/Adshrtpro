@@ -9,8 +9,11 @@ import {
   insertBlogPostSchema,
   insertCustomAdSchema,
   loginSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
   type AuthUser,
 } from "@shared/schema";
+import { randomUUID } from "crypto";
 import { z } from "zod";
 
 declare module "express-session" {
@@ -180,6 +183,7 @@ export async function registerRoutes(
       referralCode: user.referralCode ?? null,
       balanceUsd: balance?.balanceUsd,
       socialVerified: user.socialVerified ?? false,
+      telegramUsername: user.telegramUsername ?? undefined,
     };
     res.json(authUser);
   });
@@ -220,6 +224,7 @@ export async function registerRoutes(
         analyticsUnlockExpiry: user.analyticsUnlockExpiry,
         referralCode: user.referralCode ?? null,
         socialVerified: user.socialVerified ?? false,
+        telegramUsername: user.telegramUsername ?? undefined,
       };
       
       // Explicitly save session before responding
@@ -268,6 +273,7 @@ export async function registerRoutes(
         referralCode: user.referralCode ?? null,
         balanceUsd: balance?.balanceUsd,
         socialVerified: user.socialVerified ?? false,
+        telegramUsername: user.telegramUsername ?? undefined,
       };
       
       // Explicitly save session before responding
@@ -293,6 +299,117 @@ export async function registerRoutes(
       }
       res.json({ message: "Logged out" });
     });
+  });
+
+  // Forgot password - request reset token
+  app.post("/api/auth/forgot-password", async (req, res) => {
+    try {
+      const data = forgotPasswordSchema.parse(req.body);
+      const user = await storage.getUserByEmail(data.email);
+      
+      if (!user) {
+        // Don't reveal if email exists for security
+        return res.json({ message: "If the email exists, a reset link has been sent." });
+      }
+
+      // Generate reset token and set expiry (1 hour from now)
+      const resetToken = randomUUID();
+      const resetExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+      await storage.updateUser(user.id, {
+        passwordResetToken: resetToken,
+        passwordResetExpiry: resetExpiry,
+      });
+
+      // In production, send email with reset link
+      // For now, log the token
+      console.log(`Password reset token for ${user.email}: ${resetToken}`);
+      console.log(`Reset link: ${process.env.APP_URL || 'http://localhost:5000'}/reset-password?token=${resetToken}`);
+
+      res.json({ message: "If the email exists, a reset link has been sent." });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Reset password - use token to set new password
+  app.post("/api/auth/reset-password", async (req, res) => {
+    try {
+      const data = resetPasswordSchema.parse(req.body);
+      const user = await storage.getUserByPasswordResetToken(data.token);
+
+      if (!user) {
+        return res.status(400).json({ message: "Invalid or expired reset token" });
+      }
+
+      // Check if token is expired
+      if (!user.passwordResetExpiry || new Date() > user.passwordResetExpiry) {
+        return res.status(400).json({ message: "Reset token has expired" });
+      }
+
+      // Hash new password and update user
+      const hashedPassword = await bcrypt.hash(data.password, 10);
+      await storage.updateUser(user.id, {
+        password: hashedPassword,
+        passwordResetToken: null,
+        passwordResetExpiry: null,
+      });
+
+      res.json({ message: "Password has been reset successfully" });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.errors[0].message });
+      }
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Update profile (telegram username)
+  app.patch("/api/auth/profile", requireAuth, async (req, res) => {
+    try {
+      const { telegramUsername } = req.body;
+      const user = await storage.getUser(req.session.userId!);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Validate telegram username format (optional, alphanumeric and underscores, 5-32 chars)
+      if (telegramUsername && typeof telegramUsername === 'string') {
+        const cleanUsername = telegramUsername.replace(/^@/, ''); // Remove @ prefix if present
+        if (cleanUsername.length > 0 && (cleanUsername.length < 5 || cleanUsername.length > 32)) {
+          return res.status(400).json({ message: "Telegram username must be 5-32 characters" });
+        }
+        if (cleanUsername.length > 0 && !/^[a-zA-Z0-9_]+$/.test(cleanUsername)) {
+          return res.status(400).json({ message: "Telegram username can only contain letters, numbers, and underscores" });
+        }
+        await storage.updateUser(user.id, { telegramUsername: cleanUsername || null });
+      } else {
+        await storage.updateUser(user.id, { telegramUsername: null });
+      }
+
+      const updatedUser = await storage.getUser(user.id);
+      const balance = await storage.getUserBalance(user.id);
+      
+      const authUser: AuthUser = {
+        id: updatedUser!.id,
+        email: updatedUser!.email,
+        emailVerified: updatedUser!.emailVerified ?? false,
+        isAdmin: updatedUser!.isAdmin ?? false,
+        analyticsUnlockExpiry: updatedUser!.analyticsUnlockExpiry,
+        referralCode: updatedUser!.referralCode ?? null,
+        balanceUsd: balance?.balanceUsd,
+        socialVerified: updatedUser!.socialVerified ?? false,
+        telegramUsername: updatedUser!.telegramUsername ?? undefined,
+      };
+
+      res.json(authUser);
+    } catch (error) {
+      res.status(500).json({ message: "Server error" });
+    }
   });
 
   // Verify email

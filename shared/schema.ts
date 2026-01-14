@@ -16,6 +16,9 @@ export const users = pgTable("users", {
   referredBy: varchar("referred_by", { length: 36 }),
   socialVerified: boolean("social_verified").default(false),
   socialVerifiedAt: timestamp("social_verified_at"),
+  telegramUsername: text("telegram_username"),
+  passwordResetToken: text("password_reset_token"),
+  passwordResetExpiry: timestamp("password_reset_expiry"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -25,10 +28,21 @@ export const insertUserSchema = createInsertSchema(users).pick({
 }).extend({
   email: z.string().email("Invalid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
+  telegramUsername: z.string().optional(),
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+
+// Password reset schemas
+export const forgotPasswordSchema = z.object({
+  email: z.string().email("Invalid email address"),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1, "Token is required"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+});
 
 // Links table
 export const links = pgTable("links", {
@@ -153,6 +167,7 @@ export interface AuthUser {
   referralCode: string | null;
   balanceUsd?: string;
   socialVerified?: boolean;
+  telegramUsername?: string;
 }
 
 // Login schema
