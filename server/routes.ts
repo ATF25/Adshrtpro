@@ -1043,6 +1043,34 @@ export async function registerRoutes(
     res.json(enabled.map(s => ({ network: s.network, isEnabled: s.isEnabled })));
   });
 
+  // Get AdBlueMedia offers (proxy to avoid CORS)
+  app.get("/api/offerwalls/adbluemedia/offers", requireAuth, async (req, res) => {
+    try {
+      const { userId } = req.query;
+      if (!userId) {
+        return res.status(400).json({ message: "userId required" });
+      }
+
+      const setting = await storage.getOfferwallSetting("adbluemedia");
+      if (!setting?.isEnabled) {
+        return res.json([]);
+      }
+
+      const feedUrl = `https://d2xohqmdyl2cj3.cloudfront.net/public/offers/feed.php?user_id=518705&api_key=f24063d0d801e4daa846e9da4454c467&s1=${userId}&s2=`;
+      
+      const response = await fetch(feedUrl);
+      if (!response.ok) {
+        throw new Error("Failed to fetch offers");
+      }
+      
+      const offers = await response.json();
+      res.json(Array.isArray(offers) ? offers : []);
+    } catch (error) {
+      console.error("AdBlueMedia offers fetch error:", error);
+      res.status(500).json({ message: "Failed to fetch offers" });
+    }
+  });
+
   // CPAGrip postback handler
   app.get("/api/postback/cpagrip", async (req, res) => {
     const { user_id, offer_id, payout, transaction_id, ip, secret } = req.query;

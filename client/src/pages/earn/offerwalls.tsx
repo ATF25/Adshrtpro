@@ -3,10 +3,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ExternalLink, AlertCircle } from "lucide-react";
+import { ExternalLink, AlertCircle, DollarSign, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { Link } from "wouter";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const OFFERWALL_CONFIG = {
   cpagrip: {
@@ -52,6 +52,94 @@ function CPAGripEmbed() {
   return (
     <div className="min-h-[400px] bg-card rounded-lg border p-4">
       <div ref={containerRef} className="offerwall-container" />
+    </div>
+  );
+}
+
+interface AdBlueOffer {
+  id: string;
+  name: string;
+  anchor: string;
+  conversion: string;
+  payout: string;
+  url: string;
+  network_icon: string;
+}
+
+function AdBlueMediaOffers({ userId }: { userId: string }) {
+  const [offers, setOffers] = useState<AdBlueOffer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchOffers = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(`/api/offerwalls/adbluemedia/offers?userId=${userId}`);
+        if (!response.ok) throw new Error("Failed to fetch offers");
+        const data = await response.json();
+        setOffers(data);
+      } catch (err) {
+        setError("Failed to load offers. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchOffers();
+  }, [userId]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        {error}
+      </div>
+    );
+  }
+
+  if (offers.length === 0) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        No offers available at the moment. Please check back later.
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      {offers.map((offer) => (
+        <Card key={offer.id} className="hover-elevate">
+          <CardContent className="pt-4">
+            <div className="flex items-start gap-3">
+              {offer.network_icon && (
+                <img src={offer.network_icon} alt="" className="w-12 h-12 rounded object-cover" />
+              )}
+              <div className="flex-1 min-w-0">
+                <h4 className="font-medium text-sm line-clamp-2">{offer.name}</h4>
+                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{offer.anchor}</p>
+              </div>
+            </div>
+            <div className="flex items-center justify-between mt-4">
+              <Badge variant="secondary" className="gap-1">
+                <DollarSign className="h-3 w-3" />
+                {parseFloat(offer.payout).toFixed(2)}
+              </Badge>
+              <a href={offer.url} target="_blank" rel="noopener noreferrer">
+                <Button size="sm" data-testid={`button-offer-${offer.id}`}>
+                  Complete
+                </Button>
+              </a>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
     </div>
   );
 }
@@ -159,8 +247,10 @@ export default function OfferwallsPage() {
                       Complete offers from {config.name} to earn USD. Rewards are credited automatically.
                     </p>
                     
-                    {key === "cpagrip" && config.hasEmbed ? (
+                    {key === "cpagrip" ? (
                       <CPAGripEmbed />
+                    ) : key === "adbluemedia" ? (
+                      <AdBlueMediaOffers userId={user.id} />
                     ) : (
                       <a 
                         href={config.getUrl(user.id)} 
