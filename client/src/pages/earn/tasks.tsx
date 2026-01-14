@@ -7,11 +7,33 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { ClipboardList, CheckCircle, Clock, XCircle, Upload, Link as LinkIcon, User } from "lucide-react";
+import { ClipboardList, CheckCircle, Clock, XCircle, Upload, Link as LinkIcon, User, ExternalLink, FileText, Image } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+
+function makeLinksClickable(text: string) {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+  return parts.map((part, index) => {
+    if (urlRegex.test(part)) {
+      return (
+        <a
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary hover:underline inline-flex items-center gap-1"
+        >
+          {part}
+          <ExternalLink className="w-3 h-3" />
+        </a>
+      );
+    }
+    return part;
+  });
+}
 
 interface Task {
   id: string;
@@ -158,15 +180,32 @@ export default function TasksPage() {
               <CardContent>
                 {task.instructions && (
                   <div className="mb-4 p-3 bg-muted rounded-lg">
-                    <p className="text-sm font-medium mb-1">Instructions:</p>
-                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{task.instructions}</p>
+                    <div className="flex items-center gap-2 mb-2">
+                      <FileText className="w-4 h-4 text-primary" />
+                      <p className="text-sm font-medium">Instructions:</p>
+                    </div>
+                    <div className="text-sm text-muted-foreground whitespace-pre-wrap">
+                      {makeLinksClickable(task.instructions)}
+                    </div>
                   </div>
                 )}
                 
-                <div className="flex items-center justify-between">
+                <div className="mb-4 p-3 border rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Image className="w-4 h-4 text-primary" />
+                    <p className="text-sm font-medium">Proof Requirements:</p>
+                  </div>
+                  <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
+                    <li>Profile/Post Link: Submit the link to your completed action</li>
+                    <li>Additional Text: Your username or any notes</li>
+                    <li>Screenshots: Upload to <a href="https://imgbb.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">imgbb.com</a> or <a href="https://postimages.org" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">postimages.org</a> and paste the links</li>
+                  </ul>
+                </div>
+                
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     {getProofIcon(task.proofType)}
-                    <span>Proof required: {task.proofType}</span>
+                    <span>Primary proof type: {task.proofType}</span>
                   </div>
                   
                   {task.hasSubmitted ? (

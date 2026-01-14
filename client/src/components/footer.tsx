@@ -58,6 +58,11 @@ export function Footer() {
                   Contact
                 </Link>
               </li>
+              <li>
+                <Link href="/socials" className="text-muted-foreground hover:text-foreground transition-colors">
+                  Socials
+                </Link>
+              </li>
             </ul>
           </div>
         </div>

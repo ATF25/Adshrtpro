@@ -18,10 +18,41 @@ import {
   ExternalLink,
   Copy,
   Check,
+  CheckCircle,
+  Wallet,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import type { Link as LinkType } from "@shared/schema";
+import { SiBitcoin, SiEthereum, SiDogecoin, SiLitecoin } from "react-icons/si";
+
+interface PaymentProof {
+  id: string;
+  date: string;
+  username: string;
+  amount: string;
+  paymentMethod: string;
+}
+
+function getCryptoIcon(coin: string) {
+  const upperCoin = coin?.toUpperCase() || "";
+  switch (upperCoin) {
+    case "BTC":
+    case "BITCOIN":
+      return <SiBitcoin className="w-4 h-4 text-orange-500" />;
+    case "ETH":
+    case "ETHEREUM":
+      return <SiEthereum className="w-4 h-4 text-blue-500" />;
+    case "DOGE":
+    case "DOGECOIN":
+      return <SiDogecoin className="w-4 h-4 text-yellow-500" />;
+    case "LTC":
+    case "LITECOIN":
+      return <SiLitecoin className="w-4 h-4 text-gray-500" />;
+    default:
+      return <Wallet className="w-4 h-4 text-green-500" />;
+  }
+}
 
 export default function HomePage() {
   const { user } = useAuth();
@@ -32,6 +63,20 @@ export default function HomePage() {
     queryKey: ["/api/links"],
     enabled: !!user,
   });
+
+  const { data: paymentProofs = [] } = useQuery<PaymentProof[]>({
+    queryKey: ["/api/public/payment-proofs"],
+    refetchInterval: 60000, // Refresh every 60 seconds
+  });
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  };
 
   const copyToClipboard = async (shortCode: string, id: string) => {
     const shortUrl = `${window.location.origin}/${shortCode}`;
@@ -205,6 +250,58 @@ export default function HomePage() {
       </section>
 
       <AdDisplay placement="footer" className="py-6 px-4" />
+
+      {paymentProofs.length > 0 && (
+        <section className="py-12 px-4 bg-card border-y">
+          <div className="max-w-4xl mx-auto">
+            <div className="text-center mb-8">
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <CheckCircle className="w-6 h-6 text-green-500" />
+                <h2 className="font-heading text-2xl font-semibold">Recent Payments</h2>
+              </div>
+              <p className="text-muted-foreground">Real withdrawals from our users</p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {paymentProofs.slice(0, 12).map((proof) => {
+                const amount = parseFloat(proof.amount);
+                if (isNaN(amount) || amount <= 0 || !proof.date) return null;
+                return (
+                  <Card key={proof.id} className="bg-background">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                            {getCryptoIcon(proof.paymentMethod)}
+                          </div>
+                          <div>
+                            <p className="font-medium text-sm">{proof.username}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatDate(proof.date)}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold text-green-600 dark:text-green-400">
+                            ${amount.toFixed(2)}
+                          </p>
+                          <p className="text-xs text-muted-foreground uppercase">
+                            {proof.paymentMethod}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+
+            <p className="text-center text-xs text-muted-foreground mt-6">
+              Payments shown are real user withdrawals. Amounts vary based on activity and offer availability.
+            </p>
+          </div>
+        </section>
+      )}
 
       <section className="py-16 px-4 bg-primary text-primary-foreground">
         <div className="max-w-4xl mx-auto text-center">

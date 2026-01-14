@@ -29,6 +29,7 @@ import OfferwallsPage from "@/pages/earn/offerwalls";
 import TasksPage from "@/pages/earn/tasks";
 import ReferralsPage from "@/pages/earn/referrals";
 import WithdrawPage from "@/pages/earn/withdraw";
+import SocialsPage from "@/pages/socials";
 
 function Router() {
   return (
@@ -54,6 +55,7 @@ function Router() {
       <Route path="/privacy" component={PrivacyPage} />
       <Route path="/terms" component={TermsPage} />
       <Route path="/contact" component={ContactPage} />
+      <Route path="/socials" component={SocialsPage} />
       <Route component={NotFound} />
     </Switch>
   );

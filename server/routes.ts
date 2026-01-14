@@ -666,6 +666,46 @@ export async function registerRoutes(
     });
   });
 
+  // Public endpoint for payment proofs (recent withdrawals)
+  app.get("/api/public/payment-proofs", async (req, res) => {
+    const withdrawals = await storage.getAllWithdrawalRequests();
+    
+    // Filter only completed/paid withdrawals, sort by most recent first, then take 15
+    const paidWithdrawals = withdrawals
+      .filter(w => w.status === "paid" || w.status === "completed")
+      .sort((a, b) => {
+        const dateA = (a.processedAt || a.requestedAt) ? new Date(a.processedAt || a.requestedAt!).getTime() : 0;
+        const dateB = (b.processedAt || b.requestedAt) ? new Date(b.processedAt || b.requestedAt!).getTime() : 0;
+        return dateB - dateA;
+      })
+      .slice(0, 15);
+    
+    // Get user info and mask usernames (use email prefix as display name)
+    const proofs = await Promise.all(paidWithdrawals.map(async (w) => {
+      const user = await storage.getUser(w.userId);
+      // Use email prefix before @ as display name
+      const emailPrefix = user?.email?.split("@")[0] || "user";
+      
+      // Mask username: always show first char + *** for privacy regardless of length
+      const maskedUsername = emailPrefix.length >= 1 
+        ? emailPrefix.charAt(0) + "***" 
+        : "u***";
+      
+      // Ensure amount is valid
+      const amount = parseFloat(w.amountUsd) || 0;
+      
+      return {
+        id: w.id,
+        date: w.processedAt || w.requestedAt,
+        username: maskedUsername,
+        amount: amount.toFixed(2),
+        paymentMethod: w.coinType || "CRYPTO",
+      };
+    }));
+    
+    res.json(proofs);
+  });
+
   // ============ ADMIN ROUTES ============
 
   // Get platform stats
@@ -1604,9 +1644,9 @@ export async function registerRoutes(
       const user = await storage.getUser(w.userId);
       return {
         ...w,
-        userName: user?.username || user?.email?.split("@")[0] || "Unknown",
+        userName: user?.email?.split("@")[0] || "Unknown",
         userEmail: user?.email || "No email",
-        userFaucetPayEmail: user?.faucetpayEmail || w.faucetpayEmail || "Not set",
+        userFaucetPayEmail: w.faucetpayEmail || "Not set",
       };
     }));
     res.json(enriched);
@@ -1758,7 +1798,7 @@ export async function registerRoutes(
         submission.userId,
         { status, adminNotes, reviewedAt: new Date() },
         task.maxCompletions,
-        task.rewardUsd,
+        parseFloat(task.rewardUsd),
         task.title
       );
 
