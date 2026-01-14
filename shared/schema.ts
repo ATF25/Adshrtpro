@@ -12,6 +12,9 @@ export const users = pgTable("users", {
   analyticsUnlockExpiry: timestamp("analytics_unlock_expiry"),
   isAdmin: boolean("is_admin").default(false),
   isBanned: boolean("is_banned").default(false),
+  referralCode: varchar("referral_code", { length: 10 }).unique(),
+  referredBy: varchar("referred_by", { length: 36 }),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
@@ -145,6 +148,8 @@ export interface AuthUser {
   emailVerified: boolean;
   isAdmin: boolean;
   analyticsUnlockExpiry: Date | null;
+  referralCode: string | null;
+  balanceUsd?: string;
 }
 
 // Login schema
@@ -283,3 +288,153 @@ export const adSizeRecommendations = {
   "320x50": { name: "Mobile Banner", description: "Mobile header/footer", width: 320, height: 50 },
   "320x100": { name: "Large Mobile Banner", description: "Mobile header/footer", width: 320, height: 100 },
 };
+
+// ============ EARNING SYSTEM TABLES ============
+
+// User balances table
+export const userBalances = pgTable("user_balances", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  userId: varchar("user_id", { length: 36 }).notNull().unique(),
+  balanceUsd: text("balance_usd").default("0"), // Stored as string for precision
+  totalEarned: text("total_earned").default("0"),
+  totalWithdrawn: text("total_withdrawn").default("0"),
+  faucetpayEmail: text("faucetpay_email"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type UserBalance = typeof userBalances.$inferSelect;
+
+// Transactions table for audit trail
+export const transactions = pgTable("transactions", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  userId: varchar("user_id", { length: 36 }).notNull(),
+  type: text("type").notNull(), // offerwall, task, referral, withdrawal
+  amount: text("amount").notNull(), // USD amount as string
+  description: text("description"),
+  network: text("network"), // CPAGrip, AdBlueMedia, etc.
+  offerId: text("offer_id"),
+  ip: text("ip"),
+  status: text("status").default("completed"), // pending, completed, rejected
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type Transaction = typeof transactions.$inferSelect;
+
+// Offerwall completions table (for duplicate prevention)
+export const offerwallCompletions = pgTable("offerwall_completions", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  userId: varchar("user_id", { length: 36 }).notNull(),
+  network: text("network").notNull(), // CPAGrip, AdBlueMedia
+  offerId: text("offer_id").notNull(),
+  transactionId: text("transaction_id"), // Network's transaction ID
+  payout: text("payout").notNull(),
+  ip: text("ip"),
+  completedAt: timestamp("completed_at").defaultNow(),
+});
+
+export type OfferwallCompletion = typeof offerwallCompletions.$inferSelect;
+
+// Tasks table
+export const tasks = pgTable("tasks", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  instructions: text("instructions"),
+  requirements: text("requirements"),
+  proofInstructions: text("proof_instructions"),
+  rewardUsd: text("reward_usd").notNull(), // USD amount as string
+  proofType: text("proof_type").notNull(), // screenshot, link, username
+  isActive: boolean("is_active").default(true),
+  maxCompletions: integer("max_completions"), // null means unlimited
+  completedCount: integer("completed_count").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertTaskSchema = createInsertSchema(tasks).pick({
+  title: true,
+  description: true,
+  instructions: true,
+  requirements: true,
+  proofInstructions: true,
+  rewardUsd: true,
+  proofType: true,
+  isActive: true,
+  maxCompletions: true,
+}).extend({
+  title: z.string().min(1, "Title is required"),
+  description: z.string().min(1, "Description is required"),
+  rewardUsd: z.string().min(1, "Reward is required"),
+  proofType: z.enum(["screenshot", "link", "username"]).optional(),
+});
+
+export type InsertTask = z.infer<typeof insertTaskSchema>;
+export type Task = typeof tasks.$inferSelect;
+
+// Task submissions table
+export const taskSubmissions = pgTable("task_submissions", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  taskId: varchar("task_id", { length: 36 }).notNull(),
+  userId: varchar("user_id", { length: 36 }).notNull(),
+  proofData: text("proof_data").notNull(), // URL or text proof
+  status: text("status").default("pending"), // pending, approved, rejected
+  adminNotes: text("admin_notes"),
+  submittedAt: timestamp("submitted_at").defaultNow(),
+  reviewedAt: timestamp("reviewed_at"),
+});
+
+export type TaskSubmission = typeof taskSubmissions.$inferSelect;
+
+// Referrals table
+export const referrals = pgTable("referrals", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  referrerId: varchar("referrer_id", { length: 36 }).notNull(),
+  referredId: varchar("referred_id", { length: 36 }).notNull(),
+  referralCode: text("referral_code").notNull(),
+  status: text("status").default("pending"), // pending, valid, credited, rejected
+  linksCreated: integer("links_created").default(0),
+  socialProof: text("social_proof"), // Screenshot or profile link
+  ip: text("ip"),
+  createdAt: timestamp("created_at").defaultNow(),
+  validatedAt: timestamp("validated_at"),
+});
+
+export type Referral = typeof referrals.$inferSelect;
+
+// Withdrawal requests table
+export const withdrawalRequests = pgTable("withdrawal_requests", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  userId: varchar("user_id", { length: 36 }).notNull(),
+  amountUsd: text("amount_usd").notNull(),
+  coinType: text("coin_type").notNull(), // BTC, ETH, DOGE, etc.
+  faucetpayEmail: text("faucetpay_email").notNull(),
+  status: text("status").default("pending"), // pending, approved, rejected, paid
+  adminNotes: text("admin_notes"),
+  txHash: text("tx_hash"), // Transaction hash after payment
+  requestedAt: timestamp("requested_at").defaultNow(),
+  processedAt: timestamp("processed_at"),
+});
+
+export type WithdrawalRequest = typeof withdrawalRequests.$inferSelect;
+
+// Offerwall settings
+export const offerwallSettings = pgTable("offerwall_settings", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  network: text("network").notNull().unique(), // CPAGrip, AdBlueMedia, FaucetPay
+  isEnabled: boolean("is_enabled").default(true),
+  apiKey: text("api_key"),
+  secretKey: text("secret_key"),
+  userId: text("user_id"),
+  postbackUrl: text("postback_url"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type OfferwallSetting = typeof offerwallSettings.$inferSelect;
+
+// Earning settings table
+export const earningSettings = pgTable("earning_settings", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  key: text("key").notNull().unique(),
+  value: text("value"),
+});
+
+export type EarningSetting = typeof earningSettings.$inferSelect;

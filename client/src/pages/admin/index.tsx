@@ -390,12 +390,13 @@ export default function AdminPage() {
         </div>
 
         <Tabs defaultValue="users">
-          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-6 mb-6">
+          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-7 mb-6">
             <TabsTrigger value="users" data-testid="tab-users">Users</TabsTrigger>
             <TabsTrigger value="links" data-testid="tab-links">Links</TabsTrigger>
             <TabsTrigger value="blog" data-testid="tab-blog">Blog</TabsTrigger>
             <TabsTrigger value="sponsored" data-testid="tab-sponsored">Sponsored</TabsTrigger>
             <TabsTrigger value="settings" data-testid="tab-settings">Ads</TabsTrigger>
+            <TabsTrigger value="earning" data-testid="tab-earning">Earning</TabsTrigger>
             <TabsTrigger value="security" data-testid="tab-security">Security</TabsTrigger>
           </TabsList>
 
@@ -909,6 +910,40 @@ export default function AdminPage() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="earning">
+            <div className="space-y-6">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between gap-4">
+                  <CardTitle>Earning System Settings</CardTitle>
+                  <Link href="/admin/earning">
+                    <Button data-testid="button-manage-earning">
+                      Manage Earning System
+                    </Button>
+                  </Link>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-muted-foreground">
+                    Manage tasks, withdrawals, referrals, and offerwall settings from the dedicated earning management page.
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                    <div className="p-4 border rounded-lg">
+                      <p className="text-sm text-muted-foreground">Tasks Management</p>
+                      <p className="text-xl font-bold">Create & approve tasks</p>
+                    </div>
+                    <div className="p-4 border rounded-lg">
+                      <p className="text-sm text-muted-foreground">Withdrawals</p>
+                      <p className="text-xl font-bold">Review & process</p>
+                    </div>
+                    <div className="p-4 border rounded-lg">
+                      <p className="text-sm text-muted-foreground">Referrals</p>
+                      <p className="text-xl font-bold">Validate & reward</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
 
           <TabsContent value="security">

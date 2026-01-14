@@ -19,6 +19,16 @@ import {
   type InsertNotification,
   type CustomAd,
   type InsertCustomAd,
+  type UserBalance,
+  type Transaction,
+  type OfferwallCompletion,
+  type Task,
+  type InsertTask,
+  type TaskSubmission,
+  type Referral,
+  type WithdrawalRequest,
+  type OfferwallSetting,
+  type EarningSetting,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
@@ -111,6 +121,71 @@ export interface IStorage {
   createCustomAd(ad: InsertCustomAd): Promise<CustomAd>;
   updateCustomAd(id: string, data: Partial<InsertCustomAd>): Promise<CustomAd | undefined>;
   deleteCustomAd(id: string): Promise<boolean>;
+
+  // ============ EARNING SYSTEM ============
+  
+  // User Balances
+  getUserBalance(userId: string): Promise<UserBalance | undefined>;
+  createUserBalance(userId: string): Promise<UserBalance>;
+  updateUserBalance(userId: string, data: Partial<UserBalance>): Promise<UserBalance | undefined>;
+  creditBalance(userId: string, amount: string, type: string, description: string, network?: string, offerId?: string, ip?: string): Promise<Transaction>;
+  debitBalance(userId: string, amount: string, type: string, description: string): Promise<Transaction | null>;
+
+  // Transactions
+  getTransaction(id: string): Promise<Transaction | undefined>;
+  getTransactionsByUserId(userId: string): Promise<Transaction[]>;
+  getAllTransactions(): Promise<Transaction[]>;
+
+  // Offerwall Completions
+  checkOfferwallCompletion(userId: string, network: string, offerId: string): Promise<boolean>;
+  recordOfferwallCompletion(userId: string, network: string, offerId: string, transactionId: string, payout: string, ip: string): Promise<OfferwallCompletion>;
+
+  // Tasks
+  getTask(id: string): Promise<Task | undefined>;
+  getAllTasks(): Promise<Task[]>;
+  getActiveTasks(): Promise<Task[]>;
+  createTask(task: InsertTask): Promise<Task>;
+  updateTask(id: string, data: Partial<Task>): Promise<Task | undefined>;
+  deleteTask(id: string): Promise<boolean>;
+
+  // Task Submissions
+  getTaskSubmission(id: string): Promise<TaskSubmission | undefined>;
+  getTaskSubmissionsByUser(userId: string): Promise<TaskSubmission[]>;
+  getTaskSubmissionsByTask(taskId: string): Promise<TaskSubmission[]>;
+  getAllTaskSubmissions(): Promise<TaskSubmission[]>;
+  getPendingTaskSubmissions(): Promise<TaskSubmission[]>;
+  createTaskSubmission(taskId: string, userId: string, proofData: string): Promise<TaskSubmission>;
+  updateTaskSubmission(id: string, data: Partial<TaskSubmission>): Promise<TaskSubmission | undefined>;
+  updateTaskSubmissionIfPending(id: string, data: Partial<TaskSubmission>): Promise<{ updated: boolean; submission: TaskSubmission | undefined }>;
+  approveTaskSubmissionWithLock(submissionId: string, taskId: string, userId: string, data: Partial<TaskSubmission>, maxCompletions: number | null, rewardUsd: number, taskTitle: string): Promise<{ success: boolean; error?: string; submission?: TaskSubmission }>;
+  hasUserSubmittedTask(userId: string, taskId: string): Promise<boolean>;
+
+  // Referrals
+  getReferral(id: string): Promise<Referral | undefined>;
+  getReferralByReferredId(referredId: string): Promise<Referral | undefined>;
+  getReferralsByReferrer(referrerId: string): Promise<Referral[]>;
+  getAllReferrals(): Promise<Referral[]>;
+  createReferral(referrerId: string, referredId: string, referralCode: string, ip: string): Promise<Referral>;
+  updateReferral(id: string, data: Partial<Referral>): Promise<Referral | undefined>;
+  getUserByReferralCode(code: string): Promise<User | undefined>;
+
+  // Withdrawal Requests
+  getWithdrawalRequest(id: string): Promise<WithdrawalRequest | undefined>;
+  getWithdrawalRequestsByUser(userId: string): Promise<WithdrawalRequest[]>;
+  getAllWithdrawalRequests(): Promise<WithdrawalRequest[]>;
+  getPendingWithdrawalRequests(): Promise<WithdrawalRequest[]>;
+  createWithdrawalRequest(userId: string, amountUsd: string, coinType: string, faucetpayEmail: string): Promise<WithdrawalRequest>;
+  updateWithdrawalRequest(id: string, data: Partial<WithdrawalRequest>): Promise<WithdrawalRequest | undefined>;
+
+  // Offerwall Settings
+  getOfferwallSetting(network: string): Promise<OfferwallSetting | undefined>;
+  getAllOfferwallSettings(): Promise<OfferwallSetting[]>;
+  setOfferwallSetting(network: string, data: Partial<OfferwallSetting>): Promise<OfferwallSetting>;
+
+  // Earning Settings
+  getEarningSetting(key: string): Promise<string | undefined>;
+  setEarningSetting(key: string, value: string): Promise<void>;
+  getAllEarningSettings(): Promise<Record<string, string>>;
 }
 
 export class MemStorage implements IStorage {
@@ -126,6 +201,16 @@ export class MemStorage implements IStorage {
   private notifications: Map<string, Notification>;
   private linkUnlocks: Map<string, Date>;
   private customAds: Map<string, CustomAd>;
+  // Earning system maps
+  private userBalances: Map<string, UserBalance>;
+  private transactions: Map<string, Transaction>;
+  private offerwallCompletions: Map<string, OfferwallCompletion>;
+  private tasks: Map<string, Task>;
+  private taskSubmissions: Map<string, TaskSubmission>;
+  private referrals: Map<string, Referral>;
+  private withdrawalRequests: Map<string, WithdrawalRequest>;
+  private offerwallSettings: Map<string, OfferwallSetting>;
+  private earningSettings: Map<string, string>;
 
   constructor() {
     this.users = new Map();
@@ -140,6 +225,16 @@ export class MemStorage implements IStorage {
     this.notifications = new Map();
     this.linkUnlocks = new Map();
     this.customAds = new Map();
+    // Earning system
+    this.userBalances = new Map();
+    this.transactions = new Map();
+    this.offerwallCompletions = new Map();
+    this.tasks = new Map();
+    this.taskSubmissions = new Map();
+    this.referrals = new Map();
+    this.withdrawalRequests = new Map();
+    this.offerwallSettings = new Map();
+    this.earningSettings = new Map();
 
     // Initialize default settings
     this.settings.set("unlockDuration", "60");
@@ -147,8 +242,41 @@ export class MemStorage implements IStorage {
     this.settings.set("rewardedAdCode", "");
     this.settings.set("adsenseCode", "");
 
+    // Initialize earning settings
+    this.earningSettings.set("minWithdrawal", "1.00");
+    this.earningSettings.set("referralReward", "0.10");
+    this.earningSettings.set("referralLinksRequired", "3");
+    this.earningSettings.set("faucetpayEnabled", "true");
+    this.earningSettings.set("supportedCoins", "BTC,ETH,DOGE,LTC,USDT,TRX");
+
+    // Initialize offerwall settings
+    this.initOfferwallSettings();
+
     // Create sample blog posts
     this.createSampleBlogPosts();
+  }
+
+  private initOfferwallSettings() {
+    this.offerwallSettings.set("cpagrip", {
+      id: randomUUID(),
+      network: "cpagrip",
+      isEnabled: true,
+      apiKey: "35b59eb1af2454f46fe63ad7d34f923b",
+      secretKey: null,
+      userId: "621093",
+      postbackUrl: null,
+      updatedAt: new Date(),
+    });
+    this.offerwallSettings.set("adbluemedia", {
+      id: randomUUID(),
+      network: "adbluemedia",
+      isEnabled: true,
+      apiKey: "f24063d0d801e4daa846e9da4454c467",
+      secretKey: null,
+      userId: "518705",
+      postbackUrl: null,
+      updatedAt: new Date(),
+    });
   }
 
   private async createSampleBlogPosts() {
@@ -224,12 +352,27 @@ export class MemStorage implements IStorage {
     );
   }
 
+  private generateReferralCode(): string {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let result = "";
+    for (let i = 0; i < 8; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  }
+
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = randomUUID();
     const hashedPassword = await bcrypt.hash(insertUser.password, 10);
     
     const adminEmail = process.env.ADMIN_EMAIL;
     const isAdmin = Boolean(adminEmail && insertUser.email.toLowerCase() === adminEmail.toLowerCase());
+
+    // Generate unique referral code
+    let referralCode = this.generateReferralCode();
+    while (await this.getUserByReferralCode(referralCode)) {
+      referralCode = this.generateReferralCode();
+    }
 
     const user: User = {
       id,
@@ -240,8 +383,15 @@ export class MemStorage implements IStorage {
       analyticsUnlockExpiry: null,
       isAdmin: isAdmin ?? false,
       isBanned: false,
+      referralCode,
+      referredBy: null,
+      createdAt: new Date(),
     };
     this.users.set(id, user);
+
+    // Create user balance
+    await this.createUserBalance(id);
+
     return user;
   }
 
@@ -795,6 +945,580 @@ export class MemStorage implements IStorage {
 
   async deleteCustomAd(id: string): Promise<boolean> {
     return this.customAds.delete(id);
+  }
+
+  // ============ EARNING SYSTEM IMPLEMENTATIONS ============
+
+  // User Balances
+  async getUserBalance(userId: string): Promise<UserBalance | undefined> {
+    return this.userBalances.get(userId);
+  }
+
+  async createUserBalance(userId: string): Promise<UserBalance> {
+    const balance: UserBalance = {
+      id: randomUUID(),
+      userId,
+      balanceUsd: "0",
+      totalEarned: "0",
+      totalWithdrawn: "0",
+      faucetpayEmail: null,
+      updatedAt: new Date(),
+    };
+    this.userBalances.set(userId, balance);
+    return balance;
+  }
+
+  private userBalanceLocks: Map<string, { promise: Promise<void>; resolve: () => void }> = new Map();
+
+  private async acquireBalanceLock(userId: string): Promise<void> {
+    while (this.userBalanceLocks.has(userId)) {
+      await this.userBalanceLocks.get(userId)!.promise;
+    }
+    let resolve!: () => void;
+    const promise = new Promise<void>(r => { resolve = r; });
+    this.userBalanceLocks.set(userId, { promise, resolve });
+  }
+
+  private releaseBalanceLock(userId: string): void {
+    const lock = this.userBalanceLocks.get(userId);
+    if (lock) {
+      this.userBalanceLocks.delete(userId);
+      lock.resolve();
+    }
+  }
+
+  private updateUserBalanceInternal(userId: string, data: Partial<UserBalance>): UserBalance | undefined {
+    const balance = this.userBalances.get(userId);
+    if (!balance) return undefined;
+    const updated = { ...balance, ...data, updatedAt: new Date() };
+    this.userBalances.set(userId, updated);
+    return updated;
+  }
+
+  async updateUserBalance(userId: string, data: Partial<UserBalance>): Promise<UserBalance | undefined> {
+    await this.acquireBalanceLock(userId);
+    try {
+      return this.updateUserBalanceInternal(userId, data);
+    } finally {
+      this.releaseBalanceLock(userId);
+    }
+  }
+
+  async creditBalance(userId: string, amount: string, type: string, description: string, network?: string, offerId?: string, ip?: string): Promise<Transaction> {
+    await this.acquireBalanceLock(userId);
+
+    try {
+      let balance = await this.getUserBalance(userId);
+      if (!balance) {
+        balance = await this.createUserBalance(userId);
+      }
+
+      const currentBalance = parseFloat(balance.balanceUsd || "0");
+      const creditAmount = parseFloat(amount);
+      const newBalance = (currentBalance + creditAmount).toFixed(6);
+      const newTotalEarned = (parseFloat(balance.totalEarned || "0") + creditAmount).toFixed(6);
+
+      this.updateUserBalanceInternal(userId, {
+        balanceUsd: newBalance,
+        totalEarned: newTotalEarned,
+      });
+
+      const transaction: Transaction = {
+        id: randomUUID(),
+        userId,
+        type,
+        amount,
+        description,
+        network: network || null,
+        offerId: offerId || null,
+        ip: ip || null,
+        status: "completed",
+        createdAt: new Date(),
+      };
+      this.transactions.set(transaction.id, transaction);
+      return transaction;
+    } finally {
+      this.releaseBalanceLock(userId);
+    }
+  }
+
+  async debitBalance(userId: string, amount: string, type: string, description: string): Promise<Transaction | null> {
+    await this.acquireBalanceLock(userId);
+
+    try {
+      const balance = await this.getUserBalance(userId);
+      if (!balance) return null;
+
+      const currentBalance = parseFloat(balance.balanceUsd || "0");
+      const debitAmount = parseFloat(amount);
+      
+      if (currentBalance < debitAmount) return null;
+
+      const newBalance = (currentBalance - debitAmount).toFixed(6);
+      const newTotalWithdrawn = (parseFloat(balance.totalWithdrawn || "0") + debitAmount).toFixed(6);
+
+      this.updateUserBalanceInternal(userId, {
+        balanceUsd: newBalance,
+        totalWithdrawn: newTotalWithdrawn,
+      });
+
+      const transaction: Transaction = {
+        id: randomUUID(),
+        userId,
+        type,
+        amount: `-${amount}`,
+        description,
+        network: null,
+        offerId: null,
+        ip: null,
+        status: "completed",
+        createdAt: new Date(),
+      };
+      this.transactions.set(transaction.id, transaction);
+      return transaction;
+    } finally {
+      this.releaseBalanceLock(userId);
+    }
+  }
+
+  // Transactions
+  async getTransaction(id: string): Promise<Transaction | undefined> {
+    return this.transactions.get(id);
+  }
+
+  async getTransactionsByUserId(userId: string): Promise<Transaction[]> {
+    return Array.from(this.transactions.values())
+      .filter((t) => t.userId === userId)
+      .sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA;
+      });
+  }
+
+  async getAllTransactions(): Promise<Transaction[]> {
+    return Array.from(this.transactions.values())
+      .sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA;
+      });
+  }
+
+  // Offerwall Completions
+  async checkOfferwallCompletion(userId: string, network: string, offerId: string): Promise<boolean> {
+    const key = `${userId}:${network}:${offerId}`;
+    return this.offerwallCompletions.has(key);
+  }
+
+  async recordOfferwallCompletion(userId: string, network: string, offerId: string, transactionId: string, payout: string, ip: string): Promise<OfferwallCompletion> {
+    const key = `${userId}:${network}:${offerId}`;
+    const completion: OfferwallCompletion = {
+      id: randomUUID(),
+      userId,
+      network,
+      offerId,
+      transactionId,
+      payout,
+      ip,
+      completedAt: new Date(),
+    };
+    this.offerwallCompletions.set(key, completion);
+    return completion;
+  }
+
+  // Tasks
+  async getTask(id: string): Promise<Task | undefined> {
+    return this.tasks.get(id);
+  }
+
+  async getAllTasks(): Promise<Task[]> {
+    return Array.from(this.tasks.values())
+      .sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA;
+      });
+  }
+
+  async getActiveTasks(): Promise<Task[]> {
+    return Array.from(this.tasks.values())
+      .filter((t) => t.isActive)
+      .sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA;
+      });
+  }
+
+  async createTask(task: InsertTask): Promise<Task> {
+    const id = randomUUID();
+    const newTask: Task = {
+      id,
+      title: task.title,
+      description: task.description,
+      instructions: task.instructions || null,
+      rewardUsd: task.rewardUsd,
+      proofType: task.proofType,
+      isActive: task.isActive ?? true,
+      createdAt: new Date(),
+    };
+    this.tasks.set(id, newTask);
+    return newTask;
+  }
+
+  async updateTask(id: string, data: Partial<Task>): Promise<Task | undefined> {
+    const task = this.tasks.get(id);
+    if (!task) return undefined;
+    const updated = { ...task, ...data };
+    this.tasks.set(id, updated);
+    return updated;
+  }
+
+  async deleteTask(id: string): Promise<boolean> {
+    return this.tasks.delete(id);
+  }
+
+  // Task Submissions
+  async getTaskSubmission(id: string): Promise<TaskSubmission | undefined> {
+    return this.taskSubmissions.get(id);
+  }
+
+  async getTaskSubmissionsByUser(userId: string): Promise<TaskSubmission[]> {
+    return Array.from(this.taskSubmissions.values())
+      .filter((s) => s.userId === userId)
+      .sort((a, b) => {
+        const dateA = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
+        const dateB = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
+        return dateB - dateA;
+      });
+  }
+
+  async getTaskSubmissionsByTask(taskId: string): Promise<TaskSubmission[]> {
+    return Array.from(this.taskSubmissions.values())
+      .filter((s) => s.taskId === taskId)
+      .sort((a, b) => {
+        const dateA = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
+        const dateB = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
+        return dateB - dateA;
+      });
+  }
+
+  async getAllTaskSubmissions(): Promise<TaskSubmission[]> {
+    return Array.from(this.taskSubmissions.values())
+      .sort((a, b) => {
+        const dateA = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
+        const dateB = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
+        return dateB - dateA;
+      });
+  }
+
+  async getPendingTaskSubmissions(): Promise<TaskSubmission[]> {
+    return Array.from(this.taskSubmissions.values())
+      .filter((s) => s.status === "pending")
+      .sort((a, b) => {
+        const dateA = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
+        const dateB = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
+        return dateB - dateA;
+      });
+  }
+
+  async createTaskSubmission(taskId: string, userId: string, proofData: string): Promise<TaskSubmission> {
+    const id = randomUUID();
+    const submission: TaskSubmission = {
+      id,
+      taskId,
+      userId,
+      proofData,
+      status: "pending",
+      adminNotes: null,
+      submittedAt: new Date(),
+      reviewedAt: null,
+    };
+    this.taskSubmissions.set(id, submission);
+    return submission;
+  }
+
+  private submissionLocks: Set<string> = new Set();
+  private taskCompletionLocks: Set<string> = new Set();
+
+  async approveTaskSubmissionWithLock(
+    submissionId: string, 
+    taskId: string,
+    userId: string,
+    data: Partial<TaskSubmission>,
+    maxCompletions: number | null,
+    rewardUsd: number,
+    taskTitle: string
+  ): Promise<{ success: boolean; error?: string; submission?: TaskSubmission }> {
+    // Acquire task-level lock to prevent concurrent completions exceeding max
+    if (this.taskCompletionLocks.has(taskId)) {
+      return { success: false, error: "Task is being processed by another request" };
+    }
+    this.taskCompletionLocks.add(taskId);
+
+    try {
+      // Also acquire submission-level lock
+      if (this.submissionLocks.has(submissionId)) {
+        return { success: false, error: "Submission is being processed by another request" };
+      }
+      this.submissionLocks.add(submissionId);
+
+      try {
+        const submission = this.taskSubmissions.get(submissionId);
+        if (!submission) return { success: false, error: "Submission not found" };
+
+        // Check if already processed
+        if (submission.status !== "pending") {
+          return { success: false, error: "Already processed", submission };
+        }
+
+        // Re-check maxCompletions under lock
+        const task = this.tasks.get(taskId);
+        if (maxCompletions !== null) {
+          const currentCount = task?.completedCount || 0;
+          if (currentCount >= maxCompletions) {
+            return { success: false, error: "Task has reached maximum completions" };
+          }
+        }
+
+        // Store original states for rollback
+        const originalSubmission = { ...submission };
+        const originalTaskCount = task?.completedCount || 0;
+
+        // Update submission - INSIDE the lock
+        const updated = { ...submission, ...data };
+        this.taskSubmissions.set(submissionId, updated);
+
+        // Increment task completion count - INSIDE the lock
+        if (task) {
+          const newCount = originalTaskCount + 1;
+          this.tasks.set(taskId, { ...task, completedCount: newCount });
+        }
+
+        // Credit user balance - INSIDE the lock (with rollback on failure)
+        try {
+          await this.creditBalance(userId, rewardUsd, "task_completion", `Task: ${taskTitle}`);
+        } catch (creditError) {
+          // Rollback: restore original submission and task count
+          this.taskSubmissions.set(submissionId, originalSubmission);
+          if (task) {
+            this.tasks.set(taskId, { ...task, completedCount: originalTaskCount });
+          }
+          return { success: false, error: "Failed to credit balance" };
+        }
+
+        return { success: true, submission: updated };
+      } finally {
+        this.submissionLocks.delete(submissionId);
+      }
+    } finally {
+      this.taskCompletionLocks.delete(taskId);
+    }
+  }
+
+  async updateTaskSubmissionIfPending(id: string, data: Partial<TaskSubmission>): Promise<{ updated: boolean; submission: TaskSubmission | undefined }> {
+    // Simple lock to prevent concurrent updates
+    if (this.submissionLocks.has(id)) {
+      return { updated: false, submission: undefined }; // Another update is in progress
+    }
+    this.submissionLocks.add(id);
+    
+    try {
+      const submission = this.taskSubmissions.get(id);
+      if (!submission) return { updated: false, submission: undefined };
+      
+      // Re-check status for idempotency - only update if pending
+      if (submission.status !== "pending") {
+        return { updated: false, submission }; // Already processed
+      }
+      
+      const updated = { ...submission, ...data };
+      this.taskSubmissions.set(id, updated);
+      return { updated: true, submission: updated };
+    } finally {
+      this.submissionLocks.delete(id);
+    }
+  }
+
+  async updateTaskSubmission(id: string, data: Partial<TaskSubmission>): Promise<TaskSubmission | undefined> {
+    const submission = this.taskSubmissions.get(id);
+    if (!submission) return undefined;
+    const updated = { ...submission, ...data };
+    this.taskSubmissions.set(id, updated);
+    return updated;
+  }
+
+  async hasUserSubmittedTask(userId: string, taskId: string): Promise<boolean> {
+    return Array.from(this.taskSubmissions.values())
+      .some((s) => s.userId === userId && s.taskId === taskId);
+  }
+
+  // Referrals
+  async getReferral(id: string): Promise<Referral | undefined> {
+    return this.referrals.get(id);
+  }
+
+  async getReferralByReferredId(referredId: string): Promise<Referral | undefined> {
+    return Array.from(this.referrals.values())
+      .find((r) => r.referredId === referredId);
+  }
+
+  async getReferralsByReferrer(referrerId: string): Promise<Referral[]> {
+    return Array.from(this.referrals.values())
+      .filter((r) => r.referrerId === referrerId)
+      .sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA;
+      });
+  }
+
+  async getAllReferrals(): Promise<Referral[]> {
+    return Array.from(this.referrals.values())
+      .sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA;
+      });
+  }
+
+  async createReferral(referrerId: string, referredId: string, referralCode: string, ip: string): Promise<Referral> {
+    const id = randomUUID();
+    const referral: Referral = {
+      id,
+      referrerId,
+      referredId,
+      referralCode,
+      status: "pending",
+      linksCreated: 0,
+      socialProof: null,
+      ip,
+      createdAt: new Date(),
+      validatedAt: null,
+    };
+    this.referrals.set(id, referral);
+    return referral;
+  }
+
+  async updateReferral(id: string, data: Partial<Referral>): Promise<Referral | undefined> {
+    const referral = this.referrals.get(id);
+    if (!referral) return undefined;
+    const updated = { ...referral, ...data };
+    this.referrals.set(id, updated);
+    return updated;
+  }
+
+  async getUserByReferralCode(code: string): Promise<User | undefined> {
+    return Array.from(this.users.values())
+      .find((u) => u.referralCode === code);
+  }
+
+  // Withdrawal Requests
+  async getWithdrawalRequest(id: string): Promise<WithdrawalRequest | undefined> {
+    return this.withdrawalRequests.get(id);
+  }
+
+  async getWithdrawalRequestsByUser(userId: string): Promise<WithdrawalRequest[]> {
+    return Array.from(this.withdrawalRequests.values())
+      .filter((w) => w.userId === userId)
+      .sort((a, b) => {
+        const dateA = a.requestedAt ? new Date(a.requestedAt).getTime() : 0;
+        const dateB = b.requestedAt ? new Date(b.requestedAt).getTime() : 0;
+        return dateB - dateA;
+      });
+  }
+
+  async getAllWithdrawalRequests(): Promise<WithdrawalRequest[]> {
+    return Array.from(this.withdrawalRequests.values())
+      .sort((a, b) => {
+        const dateA = a.requestedAt ? new Date(a.requestedAt).getTime() : 0;
+        const dateB = b.requestedAt ? new Date(b.requestedAt).getTime() : 0;
+        return dateB - dateA;
+      });
+  }
+
+  async getPendingWithdrawalRequests(): Promise<WithdrawalRequest[]> {
+    return Array.from(this.withdrawalRequests.values())
+      .filter((w) => w.status === "pending")
+      .sort((a, b) => {
+        const dateA = a.requestedAt ? new Date(a.requestedAt).getTime() : 0;
+        const dateB = b.requestedAt ? new Date(b.requestedAt).getTime() : 0;
+        return dateB - dateA;
+      });
+  }
+
+  async createWithdrawalRequest(userId: string, amountUsd: string, coinType: string, faucetpayEmail: string): Promise<WithdrawalRequest> {
+    const id = randomUUID();
+    const request: WithdrawalRequest = {
+      id,
+      userId,
+      amountUsd,
+      coinType,
+      faucetpayEmail,
+      status: "pending",
+      adminNotes: null,
+      txHash: null,
+      requestedAt: new Date(),
+      processedAt: null,
+    };
+    this.withdrawalRequests.set(id, request);
+    return request;
+  }
+
+  async updateWithdrawalRequest(id: string, data: Partial<WithdrawalRequest>): Promise<WithdrawalRequest | undefined> {
+    const request = this.withdrawalRequests.get(id);
+    if (!request) return undefined;
+    const updated = { ...request, ...data };
+    this.withdrawalRequests.set(id, updated);
+    return updated;
+  }
+
+  // Offerwall Settings
+  async getOfferwallSetting(network: string): Promise<OfferwallSetting | undefined> {
+    return this.offerwallSettings.get(network);
+  }
+
+  async getAllOfferwallSettings(): Promise<OfferwallSetting[]> {
+    return Array.from(this.offerwallSettings.values());
+  }
+
+  async setOfferwallSetting(network: string, data: Partial<OfferwallSetting>): Promise<OfferwallSetting> {
+    const existing = this.offerwallSettings.get(network);
+    if (existing) {
+      const updated = { ...existing, ...data, updatedAt: new Date() };
+      this.offerwallSettings.set(network, updated);
+      return updated;
+    }
+    const setting: OfferwallSetting = {
+      id: randomUUID(),
+      network,
+      isEnabled: data.isEnabled ?? true,
+      apiKey: data.apiKey || null,
+      secretKey: data.secretKey || null,
+      userId: data.userId || null,
+      postbackUrl: data.postbackUrl || null,
+      updatedAt: new Date(),
+    };
+    this.offerwallSettings.set(network, setting);
+    return setting;
+  }
+
+  // Earning Settings
+  async getEarningSetting(key: string): Promise<string | undefined> {
+    return this.earningSettings.get(key);
+  }
+
+  async setEarningSetting(key: string, value: string): Promise<void> {
+    this.earningSettings.set(key, value);
+  }
+
+  async getAllEarningSettings(): Promise<Record<string, string>> {
+    const result: Record<string, string> = {};
+    this.earningSettings.forEach((value, key) => {
+      result[key] = value;
+    });
+    return result;
   }
 }
 

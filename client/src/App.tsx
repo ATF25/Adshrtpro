@@ -18,11 +18,17 @@ import BlogPage from "@/pages/blog";
 import BlogPostPage from "@/pages/blog-post";
 import AdminPage from "@/pages/admin/index";
 import BlogEditorPage from "@/pages/admin/blog-editor";
+import AdminEarningPage from "@/pages/admin/earning";
 import SponsorDetailPage from "@/pages/sponsor-detail";
 import PrivacyPage from "@/pages/privacy";
 import TermsPage from "@/pages/terms";
 import ContactPage from "@/pages/contact";
 import NotFound from "@/pages/not-found";
+import EarnPage from "@/pages/earn";
+import OfferwallsPage from "@/pages/earn/offerwalls";
+import TasksPage from "@/pages/earn/tasks";
+import ReferralsPage from "@/pages/earn/referrals";
+import WithdrawPage from "@/pages/earn/withdraw";
 
 function Router() {
   return (
@@ -34,9 +40,15 @@ function Router() {
       <Route path="/dashboard" component={DashboardPage} />
       <Route path="/analytics" component={AnalyticsPage} />
       <Route path="/qr-codes" component={QrCodesPage} />
+      <Route path="/earn" component={EarnPage} />
+      <Route path="/earn/offerwalls" component={OfferwallsPage} />
+      <Route path="/earn/tasks" component={TasksPage} />
+      <Route path="/earn/referrals" component={ReferralsPage} />
+      <Route path="/earn/withdraw" component={WithdrawPage} />
       <Route path="/blog" component={BlogPage} />
       <Route path="/blog/:slug" component={BlogPostPage} />
       <Route path="/admin" component={AdminPage} />
+      <Route path="/admin/earning" component={AdminEarningPage} />
       <Route path="/admin/blog/:id" component={BlogEditorPage} />
       <Route path="/sponsor/:id" component={SponsorDetailPage} />
       <Route path="/privacy" component={PrivacyPage} />

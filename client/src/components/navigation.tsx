@@ -23,6 +23,7 @@ import {
   LogOut,
   Settings,
   BookOpen,
+  DollarSign,
 } from "lucide-react";
 import { NotificationBell } from "@/components/notification-bell";
 
@@ -42,6 +43,7 @@ export function Navigation() {
         { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
         { href: "/analytics", label: "Analytics", icon: BarChart3 },
         { href: "/qr-codes", label: "QR Codes", icon: QrCode },
+        { href: "/earn", label: "Earn", icon: DollarSign },
       ]
     : [];
 

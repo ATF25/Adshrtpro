@@ -170,12 +170,15 @@ export async function registerRoutes(
     if (!user) {
       return res.json(null);
     }
+    const balance = await storage.getUserBalance(user.id);
     const authUser: AuthUser = {
       id: user.id,
       email: user.email,
       emailVerified: user.emailVerified ?? false,
       isAdmin: user.isAdmin ?? false,
       analyticsUnlockExpiry: user.analyticsUnlockExpiry,
+      referralCode: user.referralCode ?? null,
+      balanceUsd: balance?.balanceUsd,
     };
     res.json(authUser);
   });
@@ -184,6 +187,7 @@ export async function registerRoutes(
   app.post("/api/auth/register", async (req, res) => {
     try {
       const data = insertUserSchema.parse(req.body);
+      const { referralCode } = req.body;
 
       // Check if email already exists
       const existing = await storage.getUserByEmail(data.email);
@@ -194,6 +198,16 @@ export async function registerRoutes(
       const user = await storage.createUser(data);
       req.session.userId = user.id;
 
+      // Handle referral code if provided
+      if (referralCode) {
+        const referrer = await storage.getUserByReferralCode(referralCode);
+        if (referrer && referrer.id !== user.id) {
+          const clientIp = getClientIp(req);
+          await storage.createReferral(referrer.id, user.id, referralCode, clientIp);
+          await storage.updateUser(user.id, { referredBy: referrer.id });
+        }
+      }
+
       // In production, send verification email here
       console.log(`Verification token for ${user.email}: ${user.verificationToken}`);
 
@@ -203,6 +217,7 @@ export async function registerRoutes(
         emailVerified: user.emailVerified ?? false,
         isAdmin: user.isAdmin ?? false,
         analyticsUnlockExpiry: user.analyticsUnlockExpiry,
+        referralCode: user.referralCode ?? null,
       };
       
       // Explicitly save session before responding
@@ -241,12 +256,15 @@ export async function registerRoutes(
 
       req.session.userId = user.id;
 
+      const balance = await storage.getUserBalance(user.id);
       const authUser: AuthUser = {
         id: user.id,
         email: user.email,
         emailVerified: user.emailVerified ?? false,
         isAdmin: user.isAdmin ?? false,
         analyticsUnlockExpiry: user.analyticsUnlockExpiry,
+        referralCode: user.referralCode ?? null,
+        balanceUsd: balance?.balanceUsd,
       };
       
       // Explicitly save session before responding
@@ -978,6 +996,746 @@ export async function registerRoutes(
       return res.status(404).json({ message: "Notification not found" });
     }
     res.json({ message: "Notification deleted" });
+  });
+
+  // ==================== EARNING SYSTEM ====================
+
+  // Get user balance and earning info
+  app.get("/api/earning/balance", requireAuth, async (req, res) => {
+    const userId = req.session.userId!;
+    let balance = await storage.getUserBalance(userId);
+    if (!balance) {
+      balance = await storage.createUserBalance(userId);
+    }
+    res.json(balance);
+  });
+
+  // Update FaucetPay email
+  app.patch("/api/earning/faucetpay-email", requireAuth, async (req, res) => {
+    const { email } = req.body;
+    if (!email || !email.includes("@")) {
+      return res.status(400).json({ message: "Valid email required" });
+    }
+    const userId = req.session.userId!;
+    await storage.updateUserBalance(userId, { faucetpayEmail: email });
+    res.json({ message: "FaucetPay email updated" });
+  });
+
+  // Get user transactions
+  app.get("/api/earning/transactions", requireAuth, async (req, res) => {
+    const userId = req.session.userId!;
+    const transactions = await storage.getTransactionsByUserId(userId);
+    res.json(transactions);
+  });
+
+  // Get earning settings (public)
+  app.get("/api/earning/settings", async (req, res) => {
+    const settings = await storage.getAllEarningSettings();
+    res.json(settings);
+  });
+
+  // ==================== OFFERWALLS ====================
+
+  // Get offerwall settings (public - for display)
+  app.get("/api/offerwalls", requireAuth, async (req, res) => {
+    const settings = await storage.getAllOfferwallSettings();
+    const enabled = settings.filter(s => s.isEnabled);
+    res.json(enabled.map(s => ({ network: s.network, isEnabled: s.isEnabled })));
+  });
+
+  // CPAGrip postback handler
+  app.get("/api/postback/cpagrip", async (req, res) => {
+    const { user_id, offer_id, payout, transaction_id, ip, secret } = req.query;
+    
+    console.log("CPAGrip postback:", { user_id, offer_id, payout, transaction_id, ip });
+
+    // Check if offerwall is enabled and validate secret
+    const setting = await storage.getOfferwallSetting("cpagrip");
+    if (!setting?.isEnabled) {
+      return res.status(400).send("0");
+    }
+
+    // Security: Validate secret key matches configured API key
+    if (setting.apiKey && secret !== setting.apiKey) {
+      console.log("CPAGrip postback: Invalid secret key");
+      return res.status(403).send("0");
+    }
+
+    if (!user_id || !offer_id || !payout) {
+      return res.status(400).send("0");
+    }
+
+    const userId = user_id as string;
+    const offerId = offer_id as string;
+    const payoutAmount = payout as string;
+    const txId = (transaction_id as string) || "";
+    const clientIp = (ip as string) || "";
+
+    // Check for duplicate
+    const isDuplicate = await storage.checkOfferwallCompletion(userId, "cpagrip", offerId);
+    if (isDuplicate) {
+      console.log("Duplicate CPAGrip completion:", { userId, offerId });
+      return res.status(200).send("1"); // Still return success to avoid retries
+    }
+
+    // Verify user exists
+    const user = await storage.getUser(userId);
+    if (!user) {
+      return res.status(400).send("0");
+    }
+
+    // Record completion and credit balance
+    await storage.recordOfferwallCompletion(userId, "cpagrip", offerId, txId, payoutAmount, clientIp);
+    await storage.creditBalance(userId, payoutAmount, "offerwall", `CPAGrip offer: ${offerId}`, "cpagrip", offerId, clientIp);
+
+    console.log("CPAGrip credited:", { userId, offerId, payoutAmount });
+    res.status(200).send("1");
+  });
+
+  // AdBlueMedia postback handler
+  app.get("/api/postback/adbluemedia", async (req, res) => {
+    const { user_id, offer_id, payout, transaction_id, ip, secret } = req.query;
+    
+    console.log("AdBlueMedia postback:", { user_id, offer_id, payout, transaction_id, ip });
+
+    // Check if offerwall is enabled and validate secret
+    const setting = await storage.getOfferwallSetting("adbluemedia");
+    if (!setting?.isEnabled) {
+      return res.status(400).send("0");
+    }
+
+    // Security: Validate secret key matches configured API key
+    if (setting.apiKey && secret !== setting.apiKey) {
+      console.log("AdBlueMedia postback: Invalid secret key");
+      return res.status(403).send("0");
+    }
+
+    if (!user_id || !offer_id || !payout) {
+      return res.status(400).send("0");
+    }
+
+    const userId = user_id as string;
+    const offerId = offer_id as string;
+    const payoutAmount = payout as string;
+    const txId = (transaction_id as string) || "";
+    const clientIp = (ip as string) || "";
+
+    // Check for duplicate
+    const isDuplicate = await storage.checkOfferwallCompletion(userId, "adbluemedia", offerId);
+    if (isDuplicate) {
+      console.log("Duplicate AdBlueMedia completion:", { userId, offerId });
+      return res.status(200).send("1");
+    }
+
+    // Verify user exists
+    const user = await storage.getUser(userId);
+    if (!user) {
+      return res.status(400).send("0");
+    }
+
+    // Record completion and credit balance
+    await storage.recordOfferwallCompletion(userId, "adbluemedia", offerId, txId, payoutAmount, clientIp);
+    await storage.creditBalance(userId, payoutAmount, "offerwall", `AdBlueMedia offer: ${offerId}`, "adbluemedia", offerId, clientIp);
+
+    console.log("AdBlueMedia credited:", { userId, offerId, payoutAmount });
+    res.status(200).send("1");
+  });
+
+  // ==================== TASKS ====================
+
+  // Get active tasks for users
+  app.get("/api/tasks", requireAuth, async (req, res) => {
+    const tasks = await storage.getActiveTasks();
+    const userId = req.session.userId!;
+    
+    // Get user's submissions to check if they've already submitted
+    const submissions = await storage.getTaskSubmissionsByUser(userId);
+    const submittedTaskIds = new Set(submissions.map(s => s.taskId));
+    
+    const tasksWithStatus = tasks.map(task => ({
+      ...task,
+      hasSubmitted: submittedTaskIds.has(task.id),
+      submission: submissions.find(s => s.taskId === task.id),
+    }));
+    
+    res.json(tasksWithStatus);
+  });
+
+  // Submit task proof
+  app.post("/api/tasks/:id/submit", requireAuth, async (req, res) => {
+    const taskId = req.params.id;
+    const userId = req.session.userId!;
+    const { proofData } = req.body;
+
+    if (!proofData) {
+      return res.status(400).json({ message: "Proof is required" });
+    }
+
+    // Check if task exists and is active
+    const task = await storage.getTask(taskId);
+    if (!task || !task.isActive) {
+      return res.status(404).json({ message: "Task not found" });
+    }
+
+    // Check if already submitted
+    const hasSubmitted = await storage.hasUserSubmittedTask(userId, taskId);
+    if (hasSubmitted) {
+      return res.status(400).json({ message: "You have already submitted this task" });
+    }
+
+    const submission = await storage.createTaskSubmission(taskId, userId, proofData);
+    res.status(201).json(submission);
+  });
+
+  // Get user's task submissions
+  app.get("/api/tasks/submissions", requireAuth, async (req, res) => {
+    const userId = req.session.userId!;
+    const submissions = await storage.getTaskSubmissionsByUser(userId);
+    res.json(submissions);
+  });
+
+  // ==================== REFERRALS ====================
+
+  // Get user's referral info
+  app.get("/api/referrals", requireAuth, async (req, res) => {
+    const userId = req.session.userId!;
+    const user = await storage.getUser(userId);
+    const referrals = await storage.getReferralsByReferrer(userId);
+    const settings = await storage.getAllEarningSettings();
+    
+    res.json({
+      referralCode: user?.referralCode,
+      referrals,
+      reward: settings.referralReward || "0.10",
+      linksRequired: parseInt(settings.referralLinksRequired || "3"),
+    });
+  });
+
+  // Apply referral code (called during registration with ref query param)
+  app.post("/api/referrals/apply", requireAuth, async (req, res) => {
+    const { code } = req.body;
+    const userId = req.session.userId!;
+    const clientIp = getClientIp(req);
+
+    if (!code) {
+      return res.status(400).json({ message: "Referral code required" });
+    }
+
+    // Check if user was already referred
+    const existingReferral = await storage.getReferralByReferredId(userId);
+    if (existingReferral) {
+      return res.status(400).json({ message: "You already used a referral code" });
+    }
+
+    // Find referrer by code
+    const referrer = await storage.getUserByReferralCode(code);
+    if (!referrer) {
+      return res.status(400).json({ message: "Invalid referral code" });
+    }
+
+    // Can't refer yourself
+    if (referrer.id === userId) {
+      return res.status(400).json({ message: "Cannot use your own referral code" });
+    }
+
+    // Create referral
+    const referral = await storage.createReferral(referrer.id, userId, code, clientIp);
+    await storage.updateUser(userId, { referredBy: referrer.id });
+
+    res.json({ message: "Referral code applied", referral });
+  });
+
+  // ==================== WITHDRAWALS ====================
+
+  // Get user's withdrawal requests
+  app.get("/api/withdrawals", requireAuth, async (req, res) => {
+    const userId = req.session.userId!;
+    const requests = await storage.getWithdrawalRequestsByUser(userId);
+    res.json(requests);
+  });
+
+  // Create withdrawal request
+  app.post("/api/withdrawals", requireAuth, async (req, res) => {
+    const userId = req.session.userId!;
+    const { amountUsd, coinType } = req.body;
+
+    if (!amountUsd || !coinType) {
+      return res.status(400).json({ message: "Amount and coin type required" });
+    }
+
+    // Get user balance
+    const balance = await storage.getUserBalance(userId);
+    if (!balance) {
+      return res.status(400).json({ message: "No balance found" });
+    }
+
+    // Check FaucetPay email
+    if (!balance.faucetpayEmail) {
+      return res.status(400).json({ message: "Please set your FaucetPay email first" });
+    }
+
+    // Check minimum withdrawal
+    const settings = await storage.getAllEarningSettings();
+    const minWithdrawal = parseFloat(settings.minWithdrawal || "1.00");
+    const amount = parseFloat(amountUsd);
+
+    if (amount < minWithdrawal) {
+      return res.status(400).json({ message: `Minimum withdrawal is $${minWithdrawal}` });
+    }
+
+    // Check balance
+    const currentBalance = parseFloat(balance.balanceUsd || "0");
+    if (currentBalance < amount) {
+      return res.status(400).json({ message: "Insufficient balance" });
+    }
+
+    // Check supported coins
+    const supportedCoins = (settings.supportedCoins || "BTC,ETH,DOGE,LTC,USDT,TRX").split(",");
+    if (!supportedCoins.includes(coinType)) {
+      return res.status(400).json({ message: "Unsupported coin type" });
+    }
+
+    // Check for pending withdrawal
+    const pending = await storage.getPendingWithdrawalRequests();
+    const hasPending = pending.some(w => w.userId === userId);
+    if (hasPending) {
+      return res.status(400).json({ message: "You already have a pending withdrawal" });
+    }
+
+    // Debit balance
+    const debitResult = await storage.debitBalance(userId, amountUsd, "withdrawal", `Withdrawal request: ${coinType}`);
+    if (!debitResult) {
+      return res.status(400).json({ message: "Failed to process withdrawal" });
+    }
+
+    // Create withdrawal request
+    const request = await storage.createWithdrawalRequest(userId, amountUsd, coinType, balance.faucetpayEmail);
+    res.status(201).json(request);
+  });
+
+  // ==================== ADMIN EARNING MANAGEMENT ====================
+
+  // Get all earning stats
+  app.get("/api/admin/earning/stats", requireAdmin, async (req, res) => {
+    const transactions = await storage.getAllTransactions();
+    const withdrawals = await storage.getAllWithdrawalRequests();
+    const taskSubmissions = await storage.getAllTaskSubmissions();
+    const referrals = await storage.getAllReferrals();
+
+    const totalEarnings = transactions
+      .filter(t => parseFloat(t.amount) > 0)
+      .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+
+    const totalWithdrawn = withdrawals
+      .filter(w => w.status === "paid")
+      .reduce((sum, w) => sum + parseFloat(w.amountUsd), 0);
+
+    res.json({
+      totalEarnings: totalEarnings.toFixed(2),
+      totalWithdrawn: totalWithdrawn.toFixed(2),
+      pendingWithdrawals: withdrawals.filter(w => w.status === "pending").length,
+      pendingTasks: taskSubmissions.filter(t => t.status === "pending").length,
+      totalReferrals: referrals.length,
+      validReferrals: referrals.filter(r => r.status === "credited").length,
+    });
+  });
+
+  // Get all transactions
+  app.get("/api/admin/earning/transactions", requireAdmin, async (req, res) => {
+    const transactions = await storage.getAllTransactions();
+    res.json(transactions);
+  });
+
+  // Admin: Get all tasks
+  app.get("/api/admin/tasks", requireAdmin, async (req, res) => {
+    const tasks = await storage.getAllTasks();
+    res.json(tasks);
+  });
+
+  // Admin: Create task
+  app.post("/api/admin/tasks", requireAdmin, async (req, res) => {
+    try {
+      const task = await storage.createTask(req.body);
+      res.status(201).json(task);
+    } catch (error) {
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
+  // Admin: Update task
+  app.patch("/api/admin/tasks/:id", requireAdmin, async (req, res) => {
+    const task = await storage.updateTask(req.params.id, req.body);
+    if (!task) {
+      return res.status(404).json({ message: "Task not found" });
+    }
+    res.json(task);
+  });
+
+  // Admin: Delete task
+  app.delete("/api/admin/tasks/:id", requireAdmin, async (req, res) => {
+    const deleted = await storage.deleteTask(req.params.id);
+    if (!deleted) {
+      return res.status(404).json({ message: "Task not found" });
+    }
+    res.json({ message: "Task deleted" });
+  });
+
+  // Admin: Get all task submissions
+  app.get("/api/admin/task-submissions", requireAdmin, async (req, res) => {
+    const submissions = await storage.getAllTaskSubmissions();
+    // Enrich with task and user info
+    const enriched = await Promise.all(submissions.map(async (s) => {
+      const task = await storage.getTask(s.taskId);
+      const user = await storage.getUser(s.userId);
+      return {
+        ...s,
+        taskTitle: task?.title,
+        taskReward: task?.rewardUsd,
+        userEmail: user?.email,
+      };
+    }));
+    res.json(enriched);
+  });
+
+  // Admin: Approve/reject task submission
+  app.patch("/api/admin/task-submissions/:id", requireAdmin, async (req, res) => {
+    const { status, adminNotes } = req.body;
+    
+    if (!["approved", "rejected"].includes(status)) {
+      return res.status(400).json({ message: "Invalid status" });
+    }
+
+    const submission = await storage.getTaskSubmission(req.params.id);
+    if (!submission) {
+      return res.status(404).json({ message: "Submission not found" });
+    }
+
+    if (submission.status !== "pending") {
+      return res.status(400).json({ message: "Submission already processed" });
+    }
+
+    // Update submission
+    await storage.updateTaskSubmission(req.params.id, {
+      status,
+      adminNotes,
+      reviewedAt: new Date(),
+    });
+
+    // If approved, credit the user
+    if (status === "approved") {
+      const task = await storage.getTask(submission.taskId);
+      if (task) {
+        await storage.creditBalance(
+          submission.userId,
+          task.rewardUsd,
+          "task",
+          `Task completed: ${task.title}`
+        );
+      }
+    }
+
+    res.json({ message: `Submission ${status}` });
+  });
+
+  // Admin: Get all referrals
+  app.get("/api/admin/referrals", requireAdmin, async (req, res) => {
+    const referrals = await storage.getAllReferrals();
+    // Enrich with user info
+    const enriched = await Promise.all(referrals.map(async (r) => {
+      const referrer = await storage.getUser(r.referrerId);
+      const referred = await storage.getUser(r.referredId);
+      return {
+        ...r,
+        referrerEmail: referrer?.email,
+        referredEmail: referred?.email,
+      };
+    }));
+    res.json(enriched);
+  });
+
+  // Admin: Approve referral
+  app.patch("/api/admin/referrals/:id", requireAdmin, async (req, res) => {
+    const { status, adminNotes } = req.body;
+    
+    const referral = await storage.getReferral(req.params.id);
+    if (!referral) {
+      return res.status(404).json({ message: "Referral not found" });
+    }
+
+    if (referral.status === "credited") {
+      return res.status(400).json({ message: "Referral already credited" });
+    }
+
+    await storage.updateReferral(req.params.id, {
+      status,
+      validatedAt: status === "valid" || status === "credited" ? new Date() : undefined,
+    });
+
+    // If credited, pay the referrer
+    if (status === "credited") {
+      const settings = await storage.getAllEarningSettings();
+      const reward = settings.referralReward || "0.10";
+      await storage.creditBalance(
+        referral.referrerId,
+        reward,
+        "referral",
+        `Referral bonus for user ID: ${referral.referredId}`
+      );
+    }
+
+    res.json({ message: `Referral ${status}` });
+  });
+
+  // Admin: Get all withdrawals
+  app.get("/api/admin/withdrawals", requireAdmin, async (req, res) => {
+    const withdrawals = await storage.getAllWithdrawalRequests();
+    // Enrich with user info
+    const enriched = await Promise.all(withdrawals.map(async (w) => {
+      const user = await storage.getUser(w.userId);
+      return {
+        ...w,
+        userEmail: user?.email,
+      };
+    }));
+    res.json(enriched);
+  });
+
+  // Admin: Process withdrawal
+  app.patch("/api/admin/withdrawals/:id", requireAdmin, async (req, res) => {
+    const { status, txHash, adminNotes } = req.body;
+    
+    if (!["approved", "rejected", "paid"].includes(status)) {
+      return res.status(400).json({ message: "Invalid status" });
+    }
+
+    const withdrawal = await storage.getWithdrawalRequest(req.params.id);
+    if (!withdrawal) {
+      return res.status(404).json({ message: "Withdrawal not found" });
+    }
+
+    if (withdrawal.status === "paid") {
+      return res.status(400).json({ message: "Withdrawal already paid" });
+    }
+
+    // If rejecting, refund the balance
+    if (status === "rejected" && withdrawal.status === "pending") {
+      await storage.creditBalance(
+        withdrawal.userId,
+        withdrawal.amountUsd,
+        "refund",
+        "Withdrawal rejected - refund"
+      );
+    }
+
+    await storage.updateWithdrawalRequest(req.params.id, {
+      status,
+      txHash,
+      adminNotes,
+      processedAt: new Date(),
+    });
+
+    res.json({ message: `Withdrawal ${status}` });
+  });
+
+  // Admin: Get/update offerwall settings
+  app.get("/api/admin/offerwall-settings", requireAdmin, async (req, res) => {
+    const settings = await storage.getAllOfferwallSettings();
+    res.json(settings);
+  });
+
+  app.patch("/api/admin/offerwall-settings/:network", requireAdmin, async (req, res) => {
+    const setting = await storage.setOfferwallSetting(req.params.network, req.body);
+    res.json(setting);
+  });
+
+  // Admin: Get/update earning settings
+  app.get("/api/admin/earning-settings", requireAdmin, async (req, res) => {
+    const settings = await storage.getAllEarningSettings();
+    res.json(settings);
+  });
+
+  app.patch("/api/admin/earning-settings", requireAdmin, async (req, res) => {
+    const updates = req.body as Record<string, string>;
+    for (const [key, value] of Object.entries(updates)) {
+      await storage.setEarningSetting(key, value);
+    }
+    res.json({ message: "Settings updated" });
+  });
+
+  // Admin: Get all tasks
+  app.get("/api/admin/tasks", requireAdmin, async (req, res) => {
+    const tasks = await storage.getAllTasks();
+    res.json(tasks);
+  });
+
+  // Admin: Create task
+  app.post("/api/admin/tasks", requireAdmin, async (req, res) => {
+    try {
+      const task = await storage.createTask(req.body);
+      res.status(201).json(task);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to create task" });
+    }
+  });
+
+  // Admin: Update task
+  app.patch("/api/admin/tasks/:id", requireAdmin, async (req, res) => {
+    const task = await storage.updateTask(req.params.id, req.body);
+    if (!task) {
+      return res.status(404).json({ message: "Task not found" });
+    }
+    res.json(task);
+  });
+
+  // Admin: Delete task
+  app.delete("/api/admin/tasks/:id", requireAdmin, async (req, res) => {
+    const deleted = await storage.deleteTask(req.params.id);
+    if (!deleted) {
+      return res.status(404).json({ message: "Task not found" });
+    }
+    res.json({ message: "Task deleted" });
+  });
+
+  // Admin: Get all task submissions
+  app.get("/api/admin/task-submissions", requireAdmin, async (req, res) => {
+    const submissions = await storage.getAllTaskSubmissions();
+    // Enrich with task and user info
+    const enriched = await Promise.all(submissions.map(async (s) => {
+      const task = await storage.getTask(s.taskId);
+      const user = await storage.getUser(s.userId);
+      return {
+        ...s,
+        taskTitle: task?.title,
+        userEmail: user?.email,
+      };
+    }));
+    res.json(enriched);
+  });
+
+  // Admin: Review task submission
+  app.patch("/api/admin/task-submissions/:id", requireAdmin, async (req, res) => {
+    const { status, adminNotes } = req.body;
+    
+    if (!["approved", "rejected"].includes(status)) {
+      return res.status(400).json({ message: "Invalid status" });
+    }
+
+    const submission = await storage.getTaskSubmission(req.params.id);
+    if (!submission) {
+      return res.status(404).json({ message: "Submission not found" });
+    }
+
+    if (submission.status !== "pending") {
+      return res.status(400).json({ message: "Submission already reviewed" });
+    }
+
+    const task = await storage.getTask(submission.taskId);
+    if (!task) {
+      return res.status(404).json({ message: "Task not found" });
+    }
+
+    // For approvals, use the atomic method with task-level locking
+    // All operations (status update, completion count, balance credit) happen inside the lock
+    if (status === "approved") {
+      const result = await storage.approveTaskSubmissionWithLock(
+        req.params.id,
+        task.id,
+        submission.userId,
+        { status, adminNotes, reviewedAt: new Date() },
+        task.maxCompletions,
+        task.rewardUsd,
+        task.title
+      );
+
+      if (!result.success) {
+        if (result.error === "Already processed") {
+          return res.json({ message: "Submission was already processed" });
+        }
+        return res.status(409).json({ message: result.error || "Failed to process submission" });
+      }
+
+      return res.json({ message: "Submission approved" });
+    }
+
+    // For rejections, use the simpler update
+    const { updated, submission: updatedSubmission } = await storage.updateTaskSubmissionIfPending(req.params.id, {
+      status,
+      adminNotes,
+      reviewedAt: new Date(),
+    });
+
+    if (!updatedSubmission) {
+      return res.status(409).json({ message: "Submission is being processed by another request" });
+    }
+
+    if (!updated) {
+      return res.json({ message: "Submission was already processed" });
+    }
+
+    res.json({ message: `Submission ${status}` });
+  });
+
+  // Admin: Get all referrals
+  app.get("/api/admin/referrals", requireAdmin, async (req, res) => {
+    const referrals = await storage.getAllReferrals();
+    // Enrich with user info
+    const enriched = await Promise.all(referrals.map(async (r) => {
+      const referrer = await storage.getUser(r.referrerId);
+      const referred = await storage.getUser(r.referredId);
+      return {
+        ...r,
+        referrerEmail: referrer?.email,
+        referredEmail: referred?.email,
+      };
+    }));
+    res.json(enriched);
+  });
+
+  // Admin: Validate referral
+  app.patch("/api/admin/referrals/:id", requireAdmin, async (req, res) => {
+    const { isValid } = req.body;
+    
+    const referral = await storage.getReferral(req.params.id);
+    if (!referral) {
+      return res.status(404).json({ message: "Referral not found" });
+    }
+
+    if (referral.status === "rewarded") {
+      return res.status(400).json({ message: "Referral already rewarded" });
+    }
+
+    if (isValid) {
+      // Check if referred user has created enough links (query actual link count from storage)
+      const linksRequired = parseInt(await storage.getEarningSetting("referralLinksRequired") || "3");
+      const referredUserLinks = await storage.getLinksByUserId(referral.referredId);
+      const actualLinkCount = referredUserLinks.length;
+      
+      if (actualLinkCount < linksRequired) {
+        return res.status(400).json({ 
+          message: `Referred user has only created ${actualLinkCount} of ${linksRequired} required links` 
+        });
+      }
+      
+      // Update the linksCreated field with actual count and mark as validated
+      await storage.updateReferral(req.params.id, { 
+        status: "validated",
+        linksCreated: actualLinkCount 
+      });
+      
+      const rewardAmount = await storage.getEarningSetting("referralReward") || "0.10";
+      await storage.creditBalance(
+        referral.referrerId,
+        rewardAmount,
+        "referral",
+        `Referral reward for user ${referral.referredId}`
+      );
+      
+      await storage.updateReferral(req.params.id, { status: "rewarded" });
+    } else {
+      await storage.updateReferral(req.params.id, { status: "invalid" });
+    }
+
+    res.json({ message: isValid ? "Referral validated and rewarded" : "Referral marked as invalid" });
   });
 
   return httpServer;
