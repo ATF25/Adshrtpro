@@ -54,8 +54,10 @@ import {
   Megaphone,
   Plus,
   Edit,
+  Bell,
+  Send,
 } from "lucide-react";
-import type { User, Link as LinkType, BlogPost, PlatformStats, BannedIp, SponsoredPost, CustomAd } from "@shared/schema";
+import type { User, Link as LinkType, BlogPost, PlatformStats, BannedIp, SponsoredPost, CustomAd, Notification } from "@shared/schema";
 import { adSizeRecommendations } from "@shared/schema";
 import {
   Select,
@@ -96,6 +98,14 @@ export default function AdminPage() {
     adSize: "728x90" as "728x90" | "970x90" | "300x250" | "336x280" | "320x50" | "320x100",
     isEnabled: true,
   });
+  const [notificationDialogOpen, setNotificationDialogOpen] = useState(false);
+  const [notificationForm, setNotificationForm] = useState({
+    title: "",
+    message: "",
+    type: "info" as "info" | "success" | "warning" | "error",
+    isGlobal: true,
+    userId: "",
+  });
 
   const { data: stats, isLoading: statsLoading } = useQuery<PlatformStats>({
     queryKey: ["/api/admin/stats"],
@@ -119,6 +129,10 @@ export default function AdminPage() {
 
   const { data: bannedIps } = useQuery<BannedIp[]>({
     queryKey: ["/api/admin/banned-ips"],
+  });
+
+  const { data: notifications, isLoading: notificationsLoading } = useQuery<Notification[]>({
+    queryKey: ["/api/admin/notifications"],
   });
 
   const { data: settings } = useQuery<Record<string, string>>({
@@ -240,6 +254,47 @@ export default function AdminPage() {
       toast({ title: "Custom ad deleted" });
     },
   });
+
+  const createNotificationMutation = useMutation({
+    mutationFn: async (data: typeof notificationForm) => {
+      await apiRequest("POST", "/api/admin/notifications", {
+        title: data.title,
+        message: data.message,
+        type: data.type,
+        isGlobal: data.isGlobal,
+        userId: data.isGlobal ? undefined : data.userId || undefined,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/notifications"] });
+      toast({ title: "Notification sent successfully" });
+      setNotificationDialogOpen(false);
+      resetNotificationForm();
+    },
+    onError: () => {
+      toast({ title: "Failed to send notification", variant: "destructive" });
+    },
+  });
+
+  const deleteNotificationMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/admin/notifications/${id}`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/notifications"] });
+      toast({ title: "Notification deleted" });
+    },
+  });
+
+  const resetNotificationForm = () => {
+    setNotificationForm({
+      title: "",
+      message: "",
+      type: "info",
+      isGlobal: true,
+      userId: "",
+    });
+  };
 
   const resetCustomAdForm = () => {
     setCustomAdForm({
@@ -391,13 +446,14 @@ export default function AdminPage() {
         </div>
 
         <Tabs defaultValue="users">
-          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-7 mb-6">
+          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-8 mb-6">
             <TabsTrigger value="users" data-testid="tab-users">Users</TabsTrigger>
             <TabsTrigger value="links" data-testid="tab-links">Links</TabsTrigger>
             <TabsTrigger value="blog" data-testid="tab-blog">Blog</TabsTrigger>
             <TabsTrigger value="sponsored" data-testid="tab-sponsored">Sponsored</TabsTrigger>
             <TabsTrigger value="settings" data-testid="tab-settings">Ads</TabsTrigger>
             <TabsTrigger value="earning" data-testid="tab-earning">Earning</TabsTrigger>
+            <TabsTrigger value="notifications" data-testid="tab-notifications">Notifications</TabsTrigger>
             <TabsTrigger value="security" data-testid="tab-security">Security</TabsTrigger>
           </TabsList>
 
@@ -951,6 +1007,92 @@ export default function AdminPage() {
             </div>
           </TabsContent>
 
+          <TabsContent value="notifications">
+            <Card>
+              <CardHeader className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <CardTitle className="flex-1">Manage Notifications</CardTitle>
+                <Button onClick={() => setNotificationDialogOpen(true)} data-testid="button-create-notification">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Notification
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {notificationsLoading ? (
+                  <div className="space-y-2">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <Skeleton key={i} className="h-16" />
+                    ))}
+                  </div>
+                ) : notifications && notifications.length > 0 ? (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Title</TableHead>
+                        <TableHead>Message</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Target</TableHead>
+                        <TableHead>Created</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {notifications.map((notif) => (
+                        <TableRow key={notif.id}>
+                          <TableCell className="font-medium">{notif.title}</TableCell>
+                          <TableCell className="text-muted-foreground max-w-xs truncate">
+                            {notif.message}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={
+                              notif.type === "success" ? "default" :
+                              notif.type === "warning" ? "secondary" :
+                              notif.type === "error" ? "destructive" : "outline"
+                            }>
+                              {notif.type}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {notif.isGlobal ? (
+                              <Badge variant="secondary">Global</Badge>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">
+                                {users?.find(u => u.id === notif.userId)?.email || notif.userId}
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {notif.createdAt
+                              ? format(new Date(notif.createdAt), "MMM d, HH:mm")
+                              : "-"}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => deleteNotificationMutation.mutate(notif.id)}
+                              data-testid={`button-delete-notification-${notif.id}`}
+                            >
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <div className="text-center py-12">
+                    <Bell className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground mb-4">No notifications created yet</p>
+                    <Button onClick={() => setNotificationDialogOpen(true)}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Create First Notification
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           <TabsContent value="security">
             <Card>
               <CardHeader>
@@ -1269,6 +1411,109 @@ export default function AdminPage() {
                 data-testid="button-save-ad"
               >
                 {editingCustomAd ? "Save Changes" : "Create Ad"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={notificationDialogOpen} onOpenChange={setNotificationDialogOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Create Notification</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div>
+                <Label>Title</Label>
+                <Input
+                  value={notificationForm.title}
+                  onChange={(e) =>
+                    setNotificationForm((prev) => ({ ...prev, title: e.target.value }))
+                  }
+                  placeholder="Notification title"
+                  data-testid="input-notification-title"
+                />
+              </div>
+              <div>
+                <Label>Message</Label>
+                <Textarea
+                  value={notificationForm.message}
+                  onChange={(e) =>
+                    setNotificationForm((prev) => ({ ...prev, message: e.target.value }))
+                  }
+                  placeholder="Notification message..."
+                  rows={3}
+                  data-testid="input-notification-message"
+                />
+              </div>
+              <div>
+                <Label>Type</Label>
+                <Select
+                  value={notificationForm.type}
+                  onValueChange={(value: typeof notificationForm.type) =>
+                    setNotificationForm((prev) => ({ ...prev, type: value }))
+                  }
+                >
+                  <SelectTrigger data-testid="select-notification-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="info">Info</SelectItem>
+                    <SelectItem value="success">Success</SelectItem>
+                    <SelectItem value="warning">Warning</SelectItem>
+                    <SelectItem value="error">Error</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-3">
+                <Switch
+                  checked={notificationForm.isGlobal}
+                  onCheckedChange={(checked) =>
+                    setNotificationForm((prev) => ({ ...prev, isGlobal: checked }))
+                  }
+                  data-testid="switch-notification-global"
+                />
+                <Label>Send to all users (global notification)</Label>
+              </div>
+              {!notificationForm.isGlobal && (
+                <div>
+                  <Label>Target User</Label>
+                  <Select
+                    value={notificationForm.userId}
+                    onValueChange={(value) =>
+                      setNotificationForm((prev) => ({ ...prev, userId: value }))
+                    }
+                  >
+                    <SelectTrigger data-testid="select-notification-user">
+                      <SelectValue placeholder="Select a user" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {users?.map((u) => (
+                        <SelectItem key={u.id} value={u.id}>
+                          {u.email}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setNotificationDialogOpen(false);
+                  resetNotificationForm();
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => createNotificationMutation.mutate(notificationForm)}
+                disabled={!notificationForm.title || !notificationForm.message || createNotificationMutation.isPending}
+                data-testid="button-send-notification"
+              >
+                <Send className="w-4 h-4 mr-2" />
+                {createNotificationMutation.isPending ? "Sending..." : "Send Notification"}
               </Button>
             </DialogFooter>
           </DialogContent>

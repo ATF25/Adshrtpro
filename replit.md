@@ -162,3 +162,10 @@ The app runs on port 5000 using `npm run dev`.
   - Service worker (sw.js) for offline caching
   - Cache-first strategy for static assets, network-first for API
   - Apple mobile web app meta tags in index.html
+- Admin Notification Management:
+  - New "Notifications" tab in admin panel
+  - Create notifications with title, message, and type (info/success/warning/error)
+  - Send to all users (global) or target specific user
+  - View all notifications in table format with target info
+  - Delete notifications from admin panel
+  - API endpoints: GET/POST/DELETE /api/admin/notifications
