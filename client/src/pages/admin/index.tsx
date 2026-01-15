@@ -508,17 +508,19 @@ export default function AdminPage() {
         </div>
 
         <Tabs defaultValue="users">
-          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-9 mb-6">
-            <TabsTrigger value="users" data-testid="tab-users">Users</TabsTrigger>
-            <TabsTrigger value="links" data-testid="tab-links">Links</TabsTrigger>
-            <TabsTrigger value="blog" data-testid="tab-blog">Blog</TabsTrigger>
-            <TabsTrigger value="sponsored" data-testid="tab-sponsored">Sponsored</TabsTrigger>
-            <TabsTrigger value="settings" data-testid="tab-settings">Ads</TabsTrigger>
-            <TabsTrigger value="earning" data-testid="tab-earning">Earning</TabsTrigger>
-            <TabsTrigger value="notifications" data-testid="tab-notifications">Notifications</TabsTrigger>
-            <TabsTrigger value="announcements" data-testid="tab-announcements">Announcements</TabsTrigger>
-            <TabsTrigger value="security" data-testid="tab-security">Security</TabsTrigger>
-          </TabsList>
+          <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0 mb-6">
+            <TabsList className="inline-flex w-max md:grid md:w-full md:grid-cols-9 gap-1">
+              <TabsTrigger value="users" data-testid="tab-users" className="whitespace-nowrap">Users</TabsTrigger>
+              <TabsTrigger value="links" data-testid="tab-links" className="whitespace-nowrap">Links</TabsTrigger>
+              <TabsTrigger value="blog" data-testid="tab-blog" className="whitespace-nowrap">Blog</TabsTrigger>
+              <TabsTrigger value="sponsored" data-testid="tab-sponsored" className="whitespace-nowrap">Sponsored</TabsTrigger>
+              <TabsTrigger value="settings" data-testid="tab-settings" className="whitespace-nowrap">Ads</TabsTrigger>
+              <TabsTrigger value="earning" data-testid="tab-earning" className="whitespace-nowrap">Earning</TabsTrigger>
+              <TabsTrigger value="notifications" data-testid="tab-notifications" className="whitespace-nowrap">Notifications</TabsTrigger>
+              <TabsTrigger value="announcements" data-testid="tab-announcements" className="whitespace-nowrap">Announcements</TabsTrigger>
+              <TabsTrigger value="security" data-testid="tab-security" className="whitespace-nowrap">Security</TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="users">
             <Card>

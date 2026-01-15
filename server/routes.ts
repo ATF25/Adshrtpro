@@ -154,10 +154,12 @@ export async function registerRoutes(
       secret: process.env.SESSION_SECRET || "adshrtpro-secret-key",
       resave: false,
       saveUninitialized: false,
+      proxy: true, // Trust proxy for Replit deployment
       cookie: {
         secure: process.env.NODE_ENV === "production",
         httpOnly: true,
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        sameSite: "lax",
       },
     })
   );
