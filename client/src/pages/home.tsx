@@ -11,7 +11,6 @@ import {
   Link2,
   BarChart3,
   QrCode,
-  Zap,
   Shield,
   Globe,
   ArrowRight,
@@ -21,11 +20,10 @@ import {
   CheckCircle,
   Wallet,
   Users,
-  Gift,
   Layers,
   DollarSign,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import type { Link as LinkType } from "@shared/schema";
 import { SiBitcoin, SiEthereum, SiDogecoin, SiLitecoin } from "react-icons/si";
