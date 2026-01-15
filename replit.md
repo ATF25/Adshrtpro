@@ -171,6 +171,15 @@ The app runs on port 5000 using `npm run dev`.
   - API endpoints: GET/POST/DELETE /api/admin/notifications
 - Rotating Announcements Banner:
   - Auto-rotating announcements displayed below navigation
-  - Three announcement types: updates (blue), rewards (green), promotions (purple)
+  - Three announcement types: info (blue), success (green), promo (purple)
   - Pause on hover, manual navigation dots, dismissible with X button
   - 5-second rotation interval between announcements
+  - Fetches from API with fallback to default announcements
+- Admin Announcements Management:
+  - New "Announcements" tab in admin panel
+  - Create, edit, and delete announcements
+  - Fields: message, type (info/success/promo), priority, isActive toggle
+  - Priority controls display order (higher = shown first)
+  - isActive toggle enables/disables individual announcements
+  - API endpoints: GET/POST/PATCH/DELETE /api/admin/announcements
+  - Public API: GET /api/announcements (returns active announcements)

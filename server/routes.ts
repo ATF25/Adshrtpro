@@ -1180,6 +1180,48 @@ export async function registerRoutes(
     res.json({ message: "Notification deleted" });
   });
 
+  // ============ ANNOUNCEMENTS ROUTES ============
+
+  // Get active announcements (public)
+  app.get("/api/announcements", async (_req, res) => {
+    const announcements = await storage.getActiveAnnouncements();
+    res.json(announcements);
+  });
+
+  // Get all announcements (admin)
+  app.get("/api/admin/announcements", requireAdmin, async (_req, res) => {
+    const announcements = await storage.getAllAnnouncements();
+    res.json(announcements);
+  });
+
+  // Create announcement (admin)
+  app.post("/api/admin/announcements", requireAdmin, async (req, res) => {
+    try {
+      const announcement = await storage.createAnnouncement(req.body);
+      res.status(201).json(announcement);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message || "Invalid announcement data" });
+    }
+  });
+
+  // Update announcement (admin)
+  app.patch("/api/admin/announcements/:id", requireAdmin, async (req, res) => {
+    const updated = await storage.updateAnnouncement(req.params.id, req.body);
+    if (!updated) {
+      return res.status(404).json({ message: "Announcement not found" });
+    }
+    res.json(updated);
+  });
+
+  // Delete announcement (admin)
+  app.delete("/api/admin/announcements/:id", requireAdmin, async (req, res) => {
+    const deleted = await storage.deleteAnnouncement(req.params.id);
+    if (!deleted) {
+      return res.status(404).json({ message: "Announcement not found" });
+    }
+    res.json({ message: "Announcement deleted" });
+  });
+
   // ==================== EARNING SYSTEM ====================
 
   // Get user balance and earning info

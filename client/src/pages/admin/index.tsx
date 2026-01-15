@@ -57,7 +57,7 @@ import {
   Bell,
   Send,
 } from "lucide-react";
-import type { User, Link as LinkType, BlogPost, PlatformStats, BannedIp, SponsoredPost, CustomAd, Notification } from "@shared/schema";
+import type { User, Link as LinkType, BlogPost, PlatformStats, BannedIp, SponsoredPost, CustomAd, Notification, Announcement } from "@shared/schema";
 import { adSizeRecommendations } from "@shared/schema";
 import {
   Select,
@@ -106,6 +106,14 @@ export default function AdminPage() {
     isGlobal: true,
     userId: "",
   });
+  const [announcementDialogOpen, setAnnouncementDialogOpen] = useState(false);
+  const [editingAnnouncement, setEditingAnnouncement] = useState<Announcement | null>(null);
+  const [announcementForm, setAnnouncementForm] = useState({
+    message: "",
+    type: "info" as "info" | "success" | "promo",
+    isActive: true,
+    priority: 0,
+  });
 
   const { data: stats, isLoading: statsLoading } = useQuery<PlatformStats>({
     queryKey: ["/api/admin/stats"],
@@ -141,6 +149,10 @@ export default function AdminPage() {
 
   const { data: customAds, isLoading: customAdsLoading } = useQuery<CustomAd[]>({
     queryKey: ["/api/admin/custom-ads"],
+  });
+
+  const { data: announcements, isLoading: announcementsLoading } = useQuery<Announcement[]>({
+    queryKey: ["/api/admin/announcements"],
   });
 
   const banUserMutation = useMutation({
@@ -296,6 +308,56 @@ export default function AdminPage() {
     });
   };
 
+  const createAnnouncementMutation = useMutation({
+    mutationFn: async (data: typeof announcementForm) => {
+      await apiRequest("POST", "/api/admin/announcements", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/announcements"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/announcements"] });
+      toast({ title: "Announcement created" });
+      setAnnouncementDialogOpen(false);
+      resetAnnouncementForm();
+    },
+    onError: () => {
+      toast({ title: "Failed to create announcement", variant: "destructive" });
+    },
+  });
+
+  const updateAnnouncementMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<typeof announcementForm> }) => {
+      await apiRequest("PATCH", `/api/admin/announcements/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/announcements"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/announcements"] });
+      toast({ title: "Announcement updated" });
+      setAnnouncementDialogOpen(false);
+      setEditingAnnouncement(null);
+      resetAnnouncementForm();
+    },
+  });
+
+  const deleteAnnouncementMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/admin/announcements/${id}`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/announcements"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/announcements"] });
+      toast({ title: "Announcement deleted" });
+    },
+  });
+
+  const resetAnnouncementForm = () => {
+    setAnnouncementForm({
+      message: "",
+      type: "info",
+      isActive: true,
+      priority: 0,
+    });
+  };
+
   const resetCustomAdForm = () => {
     setCustomAdForm({
       name: "",
@@ -446,7 +508,7 @@ export default function AdminPage() {
         </div>
 
         <Tabs defaultValue="users">
-          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-8 mb-6">
+          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-9 mb-6">
             <TabsTrigger value="users" data-testid="tab-users">Users</TabsTrigger>
             <TabsTrigger value="links" data-testid="tab-links">Links</TabsTrigger>
             <TabsTrigger value="blog" data-testid="tab-blog">Blog</TabsTrigger>
@@ -454,6 +516,7 @@ export default function AdminPage() {
             <TabsTrigger value="settings" data-testid="tab-settings">Ads</TabsTrigger>
             <TabsTrigger value="earning" data-testid="tab-earning">Earning</TabsTrigger>
             <TabsTrigger value="notifications" data-testid="tab-notifications">Notifications</TabsTrigger>
+            <TabsTrigger value="announcements" data-testid="tab-announcements">Announcements</TabsTrigger>
             <TabsTrigger value="security" data-testid="tab-security">Security</TabsTrigger>
           </TabsList>
 
@@ -1093,6 +1156,108 @@ export default function AdminPage() {
             </Card>
           </TabsContent>
 
+          <TabsContent value="announcements">
+            <Card>
+              <CardHeader className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <CardTitle className="flex-1">Manage Announcements</CardTitle>
+                <Button onClick={() => {
+                  resetAnnouncementForm();
+                  setEditingAnnouncement(null);
+                  setAnnouncementDialogOpen(true);
+                }} data-testid="button-create-announcement">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Announcement
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {announcementsLoading ? (
+                  <div className="space-y-2">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <Skeleton key={i} className="h-16" />
+                    ))}
+                  </div>
+                ) : announcements && announcements.length > 0 ? (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Message</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Priority</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {announcements.map((ann) => (
+                        <TableRow key={ann.id}>
+                          <TableCell className="max-w-md truncate">{ann.message}</TableCell>
+                          <TableCell>
+                            <Badge variant={
+                              ann.type === "success" ? "default" :
+                              ann.type === "promo" ? "secondary" : "outline"
+                            }>
+                              {ann.type}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{ann.priority}</TableCell>
+                          <TableCell>
+                            <Switch
+                              checked={ann.isActive ?? false}
+                              onCheckedChange={(checked) => 
+                                updateAnnouncementMutation.mutate({ id: ann.id, data: { isActive: checked } })
+                              }
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  setEditingAnnouncement(ann);
+                                  setAnnouncementForm({
+                                    message: ann.message,
+                                    type: ann.type as "info" | "success" | "promo",
+                                    isActive: ann.isActive ?? true,
+                                    priority: ann.priority ?? 0,
+                                  });
+                                  setAnnouncementDialogOpen(true);
+                                }}
+                                data-testid={`button-edit-announcement-${ann.id}`}
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => deleteAnnouncementMutation.mutate(ann.id)}
+                                data-testid={`button-delete-announcement-${ann.id}`}
+                              >
+                                <Trash2 className="w-4 h-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <div className="text-center py-12">
+                    <Megaphone className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground mb-4">No announcements created yet</p>
+                    <Button onClick={() => {
+                      resetAnnouncementForm();
+                      setAnnouncementDialogOpen(true);
+                    }}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Create First Announcement
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           <TabsContent value="security">
             <Card>
               <CardHeader>
@@ -1514,6 +1679,96 @@ export default function AdminPage() {
               >
                 <Send className="w-4 h-4 mr-2" />
                 {createNotificationMutation.isPending ? "Sending..." : "Send Notification"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={announcementDialogOpen} onOpenChange={setAnnouncementDialogOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>
+                {editingAnnouncement ? "Edit Announcement" : "Create Announcement"}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div>
+                <Label>Message</Label>
+                <Textarea
+                  value={announcementForm.message}
+                  onChange={(e) =>
+                    setAnnouncementForm((prev) => ({ ...prev, message: e.target.value }))
+                  }
+                  placeholder="Announcement message..."
+                  rows={3}
+                  data-testid="input-announcement-message"
+                />
+              </div>
+              <div>
+                <Label>Type</Label>
+                <Select
+                  value={announcementForm.type}
+                  onValueChange={(value: "info" | "success" | "promo") =>
+                    setAnnouncementForm((prev) => ({ ...prev, type: value }))
+                  }
+                >
+                  <SelectTrigger data-testid="select-announcement-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="info">Info (Blue)</SelectItem>
+                    <SelectItem value="success">Success (Green)</SelectItem>
+                    <SelectItem value="promo">Promo (Purple)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Priority (higher = shown first)</Label>
+                <Input
+                  type="number"
+                  value={announcementForm.priority}
+                  onChange={(e) =>
+                    setAnnouncementForm((prev) => ({ ...prev, priority: parseInt(e.target.value) || 0 }))
+                  }
+                  data-testid="input-announcement-priority"
+                />
+              </div>
+              <div className="flex items-center gap-3">
+                <Switch
+                  checked={announcementForm.isActive}
+                  onCheckedChange={(checked) =>
+                    setAnnouncementForm((prev) => ({ ...prev, isActive: checked }))
+                  }
+                  data-testid="switch-announcement-active"
+                />
+                <Label>Active (displayed in banner)</Label>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setAnnouncementDialogOpen(false);
+                  setEditingAnnouncement(null);
+                  resetAnnouncementForm();
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  if (editingAnnouncement) {
+                    updateAnnouncementMutation.mutate({ id: editingAnnouncement.id, data: announcementForm });
+                  } else {
+                    createAnnouncementMutation.mutate(announcementForm);
+                  }
+                }}
+                disabled={!announcementForm.message || createAnnouncementMutation.isPending || updateAnnouncementMutation.isPending}
+                data-testid="button-save-announcement"
+              >
+                {createAnnouncementMutation.isPending || updateAnnouncementMutation.isPending 
+                  ? "Saving..." 
+                  : editingAnnouncement ? "Update" : "Create"}
               </Button>
             </DialogFooter>
           </DialogContent>

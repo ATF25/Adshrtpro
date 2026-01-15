@@ -279,6 +279,29 @@ export const insertNotificationSchema = createInsertSchema(notifications).pick({
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type Notification = typeof notifications.$inferSelect;
 
+// Announcements table (rotating banner)
+export const announcements = pgTable("announcements", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  message: text("message").notNull(),
+  type: text("type").notNull().default("info"), // info, success, promo
+  isActive: boolean("is_active").default(true),
+  priority: integer("priority").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertAnnouncementSchema = createInsertSchema(announcements).pick({
+  message: true,
+  type: true,
+  isActive: true,
+  priority: true,
+}).extend({
+  message: z.string().min(1, "Message is required"),
+  type: z.enum(["info", "success", "promo"]),
+});
+
+export type InsertAnnouncement = z.infer<typeof insertAnnouncementSchema>;
+export type Announcement = typeof announcements.$inferSelect;
+
 // Custom Ads table
 export const customAds = pgTable("custom_ads", {
   id: varchar("id", { length: 36 }).primaryKey(),

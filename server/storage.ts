@@ -30,6 +30,8 @@ import {
   type OfferwallSetting,
   type EarningSetting,
   type SocialVerification,
+  type Announcement,
+  type InsertAnnouncement,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
@@ -109,6 +111,13 @@ export interface IStorage {
   markAllAsRead(userId: string): Promise<void>;
   deleteNotification(id: string): Promise<boolean>;
   getAllNotifications(): Promise<Notification[]>;
+
+  // Announcements
+  getActiveAnnouncements(): Promise<Announcement[]>;
+  getAllAnnouncements(): Promise<Announcement[]>;
+  createAnnouncement(announcement: InsertAnnouncement): Promise<Announcement>;
+  updateAnnouncement(id: string, data: Partial<InsertAnnouncement>): Promise<Announcement | undefined>;
+  deleteAnnouncement(id: string): Promise<boolean>;
 
   // Per-Link Analytics Unlock
   setLinkUnlock(userId: string, linkId: string, expiry: Date): Promise<void>;
@@ -209,6 +218,7 @@ export class MemStorage implements IStorage {
   private notifications: Map<string, Notification>;
   private linkUnlocks: Map<string, Date>;
   private customAds: Map<string, CustomAd>;
+  private announcements: Map<string, Announcement>;
   // Earning system maps
   private userBalances: Map<string, UserBalance>;
   private transactions: Map<string, Transaction>;
@@ -234,6 +244,7 @@ export class MemStorage implements IStorage {
     this.notifications = new Map();
     this.linkUnlocks = new Map();
     this.customAds = new Map();
+    this.announcements = new Map();
     // Earning system
     this.userBalances = new Map();
     this.transactions = new Map();
@@ -897,6 +908,48 @@ export class MemStorage implements IStorage {
         const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return dateB - dateA;
       });
+  }
+
+  // Announcements
+  async getActiveAnnouncements(): Promise<Announcement[]> {
+    return Array.from(this.announcements.values())
+      .filter(a => a.isActive)
+      .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+  }
+
+  async getAllAnnouncements(): Promise<Announcement[]> {
+    return Array.from(this.announcements.values())
+      .sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA;
+      });
+  }
+
+  async createAnnouncement(announcement: InsertAnnouncement): Promise<Announcement> {
+    const id = randomUUID();
+    const newAnnouncement: Announcement = {
+      id,
+      message: announcement.message,
+      type: announcement.type ?? "info",
+      isActive: announcement.isActive ?? true,
+      priority: announcement.priority ?? 0,
+      createdAt: new Date(),
+    };
+    this.announcements.set(id, newAnnouncement);
+    return newAnnouncement;
+  }
+
+  async updateAnnouncement(id: string, data: Partial<InsertAnnouncement>): Promise<Announcement | undefined> {
+    const announcement = this.announcements.get(id);
+    if (!announcement) return undefined;
+    const updated = { ...announcement, ...data };
+    this.announcements.set(id, updated);
+    return updated;
+  }
+
+  async deleteAnnouncement(id: string): Promise<boolean> {
+    return this.announcements.delete(id);
   }
 
   // Per-Link Analytics Unlock

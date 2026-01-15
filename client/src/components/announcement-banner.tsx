@@ -1,27 +1,21 @@
 import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { X, Megaphone, Gift, Bell, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const defaultAnnouncements = [
-  {
-    id: "updates",
-    icon: Bell,
-    message: "Stay updated! Check notifications for new features and maintenance schedules.",
-    type: "info" as const,
-  },
-  {
-    id: "rewards",
-    icon: Gift,
-    message: "Earn rewards! Complete tasks, refer friends, and withdraw via FaucetPay.",
-    type: "success" as const,
-  },
-  {
-    id: "promo",
-    icon: Sparkles,
-    message: "New: Bulk link shortening now available! Import up to 50 URLs at once.",
-    type: "promo" as const,
-  },
-];
+interface Announcement {
+  id: string;
+  message: string;
+  type: "info" | "success" | "promo";
+  isActive: boolean;
+  priority: number;
+}
+
+const typeIcons = {
+  info: Bell,
+  success: Gift,
+  promo: Sparkles,
+};
 
 const typeStyles = {
   info: "bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200",
@@ -29,18 +23,47 @@ const typeStyles = {
   promo: "bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800 text-purple-800 dark:text-purple-200",
 };
 
+const defaultAnnouncements: Announcement[] = [
+  {
+    id: "default-updates",
+    message: "Stay updated! Check notifications for new features and maintenance schedules.",
+    type: "info",
+    isActive: true,
+    priority: 0,
+  },
+  {
+    id: "default-rewards",
+    message: "Earn rewards! Complete tasks, refer friends, and withdraw via FaucetPay.",
+    type: "success",
+    isActive: true,
+    priority: 0,
+  },
+  {
+    id: "default-promo",
+    message: "New: Bulk link shortening now available! Import up to 50 URLs at once.",
+    type: "promo",
+    isActive: true,
+    priority: 0,
+  },
+];
+
 interface AnnouncementBannerProps {
-  announcements?: typeof defaultAnnouncements;
   rotateInterval?: number;
 }
 
-export function AnnouncementBanner({ 
-  announcements = defaultAnnouncements,
-  rotateInterval = 5000 
-}: AnnouncementBannerProps) {
+export function AnnouncementBanner({ rotateInterval = 5000 }: AnnouncementBannerProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isVisible, setIsVisible] = useState(true);
   const [isPaused, setIsPaused] = useState(false);
+
+  const { data: fetchedAnnouncements } = useQuery<Announcement[]>({
+    queryKey: ["/api/announcements"],
+    staleTime: 60000,
+  });
+
+  const announcements = fetchedAnnouncements && fetchedAnnouncements.length > 0 
+    ? fetchedAnnouncements 
+    : defaultAnnouncements;
 
   useEffect(() => {
     if (isPaused || announcements.length <= 1) return;
@@ -52,10 +75,18 @@ export function AnnouncementBanner({
     return () => clearInterval(interval);
   }, [announcements.length, rotateInterval, isPaused]);
 
+  useEffect(() => {
+    if (currentIndex >= announcements.length) {
+      setCurrentIndex(0);
+    }
+  }, [announcements.length, currentIndex]);
+
   if (!isVisible || announcements.length === 0) return null;
 
   const current = announcements[currentIndex];
-  const Icon = current.icon;
+  if (!current) return null;
+
+  const Icon = typeIcons[current.type] || Bell;
 
   return (
     <div 
