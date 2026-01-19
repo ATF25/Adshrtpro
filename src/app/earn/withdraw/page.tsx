@@ -130,10 +130,10 @@ export default function WithdrawPage() {
           </CardHeader>
           <CardContent>
             <div className="text-4xl font-bold text-green-600" data-testid="text-available-balance">
-              ${balanceLoading ? "..." : availableBalance.toFixed(2)}
+              ${balanceLoading ? "..." : availableBalance.toFixed(6)}
             </div>
             <p className="text-sm text-muted-foreground mt-2">
-              Minimum withdrawal: ${minWithdrawal.toFixed(2)}
+              Minimum withdrawal: ${minWithdrawal.toFixed(6)}
             </p>
           </CardContent>
         </Card>
@@ -193,7 +193,7 @@ export default function WithdrawPage() {
             <div className="flex items-center gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
               <AlertCircle className="h-5 w-5 text-amber-600" />
               <p className="text-sm text-amber-800 dark:text-amber-200">
-                You need at least ${minWithdrawal.toFixed(2)} to withdraw.
+                You need at least ${minWithdrawal.toFixed(6)} to withdraw.
               </p>
             </div>
           ) : (
@@ -206,7 +206,7 @@ export default function WithdrawPage() {
                   step="0.01"
                   min={minWithdrawal}
                   max={availableBalance}
-                  placeholder={`Min: $${minWithdrawal.toFixed(2)}`}
+                  placeholder={`Min: $${minWithdrawal.toFixed(6)}`}
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   data-testid="input-withdraw-amount"
@@ -257,7 +257,7 @@ export default function WithdrawPage() {
               {withdrawals.map((withdrawal) => (
                 <div key={withdrawal.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
                   <div>
-                    <p className="font-medium">${parseFloat(withdrawal.amountUsd).toFixed(2)} - {withdrawal.coinType}</p>
+                    <p className="font-medium">${parseFloat(withdrawal.amountUsd).toFixed(6)} - {withdrawal.coinType}</p>
                     <p className="text-xs text-muted-foreground">
                       {new Date(withdrawal.requestedAt).toLocaleString()}
                       {withdrawal.txHash && (

@@ -266,6 +266,24 @@ export async function getClicksByLinkId(linkId: string): Promise<Click[]> {
   return await db.select().from(clicks).where(eq(clicks.linkId, linkId)).orderBy(desc(clicks.clickedAt));
 }
 
+// Helper function to record a link click with IP and user agent
+export async function recordLinkClick(linkId: string, ip: string, userAgent: string, referrer: string | null): Promise<Click> {
+  // Parse device and browser from user agent (simple detection)
+  const device = userAgent.toLowerCase().includes("mobile") ? "Mobile" : "Desktop";
+  const browser = userAgent.toLowerCase().includes("chrome") ? "Chrome" :
+                  userAgent.toLowerCase().includes("firefox") ? "Firefox" :
+                  userAgent.toLowerCase().includes("safari") ? "Safari" :
+                  userAgent.toLowerCase().includes("edge") ? "Edge" : "Other";
+
+  return await recordClick({
+    linkId,
+    country: null, // Could be enhanced with IP geolocation service
+    device,
+    browser,
+    referrer,
+  });
+}
+
 export async function getAnalyticsByLinkId(linkId: string): Promise<LinkAnalytics> {
   const allClicks = await getClicksByLinkId(linkId);
   
@@ -748,8 +766,8 @@ export async function creditBalance(userId: string, amount: string, type: string
   const balance = await getUserBalance(userId);
   if (!balance) throw new Error("User balance not found");
 
-  const newBalance = (parseFloat(balance.balanceUsd || "0") + parseFloat(amount)).toFixed(2);
-  const newTotalEarned = (parseFloat(balance.totalEarned || "0") + parseFloat(amount)).toFixed(2);
+  const newBalance = (parseFloat(balance.balanceUsd || "0") + parseFloat(amount)).toFixed(6);
+  const newTotalEarned = (parseFloat(balance.totalEarned || "0") + parseFloat(amount)).toFixed(6);
 
   await updateUserBalance(userId, {
     balanceUsd: newBalance,
@@ -782,8 +800,8 @@ export async function debitBalance(userId: string, amount: string, type: string,
 
   if (currentBalance < debitAmount) return null;
 
-  const newBalance = (currentBalance - debitAmount).toFixed(2);
-  const newTotalWithdrawn = (parseFloat(balance.totalWithdrawn || "0") + debitAmount).toFixed(2);
+  const newBalance = (currentBalance - debitAmount).toFixed(6);
+  const newTotalWithdrawn = (parseFloat(balance.totalWithdrawn || "0") + debitAmount).toFixed(6);
 
   await updateUserBalance(userId, {
     balanceUsd: newBalance,
@@ -1225,6 +1243,7 @@ export const storage = {
   deleteLink,
   recordClick,
   getClicksByLinkId,
+  recordLinkClick,
   getAnalyticsByLinkId,
   getBlogPost,
   getBlogPostBySlug,

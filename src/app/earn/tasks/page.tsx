@@ -227,7 +227,7 @@ export default function TasksPage() {
             <Alert>
               <Users className="h-4 w-4" />
               <AlertDescription>
-                <strong>How it works:</strong> Both you and your referral must complete Social Verification to earn referral rewards ($0.10 each). 
+                <strong>How it works:</strong> Both you and your referral must complete Social Verification to earn referral rewards ($0.100000 each). 
                 Your referral must also create at least 3 shortened links.
               </AlertDescription>
             </Alert>
@@ -351,7 +351,7 @@ export default function TasksPage() {
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     <Badge variant="outline" className="text-green-600 border-green-600">
-                      ${parseFloat(task.rewardUsd).toFixed(2)}
+                      ${parseFloat(task.rewardUsd).toFixed(6)}
                     </Badge>
                     {task.hasSubmitted && getStatusBadge(task.submission)}
                   </div>

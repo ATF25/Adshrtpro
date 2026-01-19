@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ExternalLink, AlertCircle, DollarSign, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { getAuthToken } from "@/lib/queryClient";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -48,7 +49,16 @@ function OfferwallOffers({ userId, network }: { userId: string; network: "cpagri
     const fetchOffers = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`/api/offerwalls/${network}/offers?userId=${userId}`);
+        const token = getAuthToken();
+        const headers: Record<string, string> = {};
+        
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+        }
+        
+        const response = await fetch(`/api/offerwalls/${network}/offers?userId=${userId}`, {
+          headers,
+        });
         if (!response.ok) throw new Error("Failed to fetch offers");
         const data = await response.json();
         setOffers(data);
@@ -110,7 +120,7 @@ function OfferwallOffers({ userId, network }: { userId: string; network: "cpagri
               <div className="flex items-center justify-between mt-4">
                 <Badge variant="secondary" className="gap-1">
                   <DollarSign className="h-3 w-3" />
-                  {parseFloat(offerPayout).toFixed(2)}
+                  {parseFloat(offerPayout).toFixed(6)}
                 </Badge>
                 <a href={offerUrl} target="_blank" rel="noopener noreferrer">
                   <Button size="sm" data-testid={`button-offer-${offerId}`}>

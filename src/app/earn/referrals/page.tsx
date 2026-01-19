@@ -122,7 +122,7 @@ export default function ReferralsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600" data-testid="text-earned-referrals">
-              ${totalEarned.toFixed(2)}
+              ${totalEarned.toFixed(6)}
             </div>
           </CardContent>
         </Card>

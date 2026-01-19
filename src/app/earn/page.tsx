@@ -55,9 +55,9 @@ export default function EarnPage() {
     );
   }
 
-  const balanceUsd = parseFloat(balance?.balanceUsd || "0").toFixed(2);
-  const totalEarned = parseFloat(balance?.totalEarned || "0").toFixed(2);
-  const totalWithdrawn = parseFloat(balance?.totalWithdrawn || "0").toFixed(2);
+  const balanceUsd = parseFloat(balance?.balanceUsd || "0").toFixed(6);
+  const totalEarned = parseFloat(balance?.totalEarned || "0").toFixed(6);
+  const totalWithdrawn = parseFloat(balance?.totalWithdrawn || "0").toFixed(6);
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -110,7 +110,7 @@ export default function EarnPage() {
             <Gift className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${settings.minWithdrawal || "1.00"}</div>
+            <div className="text-2xl font-bold">${settings.minWithdrawal || "1.000000"}</div>
             <p className="text-xs text-muted-foreground">Minimum to withdraw</p>
           </CardContent>
         </Card>
@@ -207,7 +207,7 @@ export default function EarnPage() {
                     </div>
                   </div>
                   <span className={`font-bold ${parseFloat(tx.amount) > 0 ? "text-green-600" : "text-red-600"}`}>
-                    {parseFloat(tx.amount) > 0 ? "+" : ""}${parseFloat(tx.amount).toFixed(4)}
+                    {parseFloat(tx.amount) > 0 ? "+" : ""}${parseFloat(tx.amount).toFixed(6)}
                   </span>
                 </div>
               ))}

@@ -38,10 +38,35 @@ async function seed() {
     await db.insert(schema.userBalances).values({
       id: randomUUID(),
       userId: adminId,
-      balanceUsd: "0.00",
-      totalEarned: "0.00",
-      totalWithdrawn: "0.00",
+      balanceUsd: "0.000000",
+      totalEarned: "0.000000",
+      totalWithdrawn: "0.000000",
     }).onConflictDoNothing();
+
+    // Create offerwall settings with production credentials
+    console.log("Creating offerwall settings...");
+    await db.insert(schema.offerwallSettings).values([
+      {
+        id: randomUUID(),
+        network: "cpagrip",
+        isEnabled: true,
+        apiKey: "35b59eb1af2454f46fe63ad7d34f923b",
+        secretKey: "35b59eb1af2454f46fe63ad7d34f923b",
+        userId: "621093",
+        postbackUrl: null,
+        updatedAt: new Date(),
+      },
+      {
+        id: randomUUID(),
+        network: "adbluemedia",
+        isEnabled: true,
+        apiKey: "f24063d0d801e4daa846e9da4454c467",
+        secretKey: "f24063d0d801e4daa846e9da4454c467",
+        userId: "518705",
+        postbackUrl: null,
+        updatedAt: new Date(),
+      },
+    ]).onConflictDoNothing();
 
     // Create default site settings (using siteSettings table)
     console.log("Creating default settings...");
@@ -54,10 +79,10 @@ async function seed() {
 
     // Create default earning settings
     const earningSettingsData = [
-      { key: "minWithdrawal", value: "1.00" },
-      { key: "referralBonus", value: "0.10" },
-      { key: "socialVerificationBonus", value: "0.05" },
-      { key: "taskCompletionBonus", value: "0.01" },
+      { key: "minWithdrawal", value: "1.000000" },
+      { key: "referralBonus", value: "0.100000" },
+      { key: "socialVerificationBonus", value: "0.050000" },
+      { key: "taskCompletionBonus", value: "0.010000" },
     ];
     
     for (const setting of earningSettingsData) {
@@ -108,7 +133,7 @@ async function seed() {
       title: "Follow us on Twitter",
       description: "Follow @AdShrtPro on Twitter for updates",
       instructions: "1. Follow our Twitter account\n2. Take a screenshot\n3. Submit the proof",
-      rewardUsd: "0.05",
+      rewardUsd: "0.050000",
       proofType: "screenshot",
       isActive: true,
       createdAt: new Date(),
@@ -132,9 +157,9 @@ async function seed() {
     await db.insert(schema.userBalances).values({
       id: randomUUID(),
       userId: idrisId,
-      balanceUsd: "0.00",
-      totalEarned: "0.00",
-      totalWithdrawn: "0.00",
+      balanceUsd: "0.000000",
+      totalEarned: "0.000000",
+      totalWithdrawn: "0.000000",
     }).onConflictDoNothing();
 
     // Create a couple of sample links for Idris

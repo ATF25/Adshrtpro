@@ -1056,7 +1056,7 @@ export default function AdminPage() {
                   <p className="text-muted-foreground">
                     Manage tasks, withdrawals, referrals, and offerwall settings from the dedicated earning management page.
                   </p>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
                     <div className="p-4 border rounded-lg">
                       <p className="text-sm text-muted-foreground">Tasks Management</p>
                       <p className="text-xl font-bold">Create & approve tasks</p>
@@ -1069,6 +1069,10 @@ export default function AdminPage() {
                       <p className="text-sm text-muted-foreground">Referrals</p>
                       <p className="text-xl font-bold">Validate & reward</p>
                     </div>
+                    <Link href="/admin/offerwalls" className="p-4 border rounded-lg hover:bg-accent transition-colors">
+                      <p className="text-sm text-muted-foreground">Offerwall Settings</p>
+                      <p className="text-xl font-bold">Configure networks</p>
+                    </Link>
                   </div>
                 </CardContent>
               </Card>

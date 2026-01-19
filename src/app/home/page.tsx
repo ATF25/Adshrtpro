@@ -307,7 +307,7 @@ export default function HomePage() {
                         </div>
                         <div className="text-right">
                           <p className="font-semibold text-green-600 dark:text-green-400">
-                            ${amount.toFixed(2)}
+                            ${amount.toFixed(6)}
                           </p>
                           <p className="text-xs text-muted-foreground uppercase">
                             {proof.paymentMethod}

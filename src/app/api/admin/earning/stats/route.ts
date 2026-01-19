@@ -21,8 +21,8 @@ export async function GET(req: Request) {
     .reduce((sum, w) => sum + parseFloat(w.amountUsd), 0);
 
   return NextResponse.json({
-    totalEarnings: totalEarnings.toFixed(2),
-    totalWithdrawn: totalWithdrawn.toFixed(2),
+    totalEarnings: totalEarnings.toFixed(6),
+    totalWithdrawn: totalWithdrawn.toFixed(6),
     pendingWithdrawals: withdrawals.filter(w => w.status === "pending").length,
     pendingTasks: taskSubmissions.filter(t => t.status === "pending").length,
     totalReferrals: referrals.length,
