@@ -267,7 +267,7 @@ export async function getClicksByLinkId(linkId: string): Promise<Click[]> {
 }
 
 // Helper function to record a link click with IP and user agent
-export async function recordLinkClick(linkId: string, ip: string, userAgent: string, referrer: string | null): Promise<Click> {
+export async function recordLinkClick(linkId: string, ip: string, userAgent: string, referrer: string | null, providerCountryCode?: string | null): Promise<Click> {
   // Parse device and browser from user agent (simple detection)
   const device = userAgent.toLowerCase().includes("mobile") ? "Mobile" : "Desktop";
   const browser = userAgent.toLowerCase().includes("chrome") ? "Chrome" :
@@ -275,13 +275,118 @@ export async function recordLinkClick(linkId: string, ip: string, userAgent: str
                   userAgent.toLowerCase().includes("safari") ? "Safari" :
                   userAgent.toLowerCase().includes("edge") ? "Edge" : "Other";
 
+  // Log the incoming IP for debugging
+  console.log('🔍 recordLinkClick called:', { ip, providerCountryCode, tokenPresent: !!process.env.IPINFO_TOKEN });
+
+  // If the deployment provided a country code header (eg. Cloudflare 'cf-ipcountry')
+  // prefer that — it avoids an external lookup and is fast. We map codes like 'US'
+  // to readable names using Intl.DisplayNames when available.
+  let country: string | null = null;
+
+  if (providerCountryCode) {
+    try {
+      const code = providerCountryCode.trim().toUpperCase();
+      if (code.length === 2 && typeof Intl !== 'undefined' && (Intl as any).DisplayNames) {
+        const dn = new (Intl as any).DisplayNames(["en"], { type: "region" });
+        country = dn.of(code) || code;
+      } else {
+        country = providerCountryCode;
+      }
+      console.log('✅ Using provider country header:', country);
+    } catch (e) {
+      country = providerCountryCode;
+    }
+  }
+
+  // If we still don't have a country, try ipinfo lookup (requires IPINFO_TOKEN).
+  if (!country) {
+    console.log('📡 Attempting ipinfo lookup for IP:', ip);
+    country = await lookupCountryName(ip).catch((err) => {
+      console.error('❌ Geo lookup failed:', err);
+      return null;
+    });
+    if (country) {
+      console.log('✅ Got country from ipinfo:', country);
+    } else {
+      console.log('⚠️  Country lookup returned null');
+    }
+  }
+
+  console.log('💾 Recording click with country:', country);
+
   return await recordClick({
     linkId,
-    country: null, // Could be enhanced with IP geolocation service
+    country,
     device,
     browser,
     referrer,
   });
+}
+
+// Simple in-memory cache for IP -> country lookups for the running process.
+const ipinfoCache = new Map<string, string | null>();
+
+// Lookup country name using ipinfo.io lite endpoint. The token should be
+// provided in `.env.local` as `IPINFO_TOKEN` (server-only env). Returns
+// the full country name (e.g. "United States") or null if not available.
+async function lookupCountryName(ip: string | null): Promise<string | null> {
+  if (!ip) {
+    console.log('⚠️  lookupCountryName: IP is null/undefined');
+    return null;
+  }
+  const normalized = ip.trim();
+  
+  // Check if it's a local/unknown IP
+  const isLocalIp = !normalized || normalized === "unknown" || normalized === "::1" || normalized === "127.0.0.1";
+  if (isLocalIp) {
+    console.log('⚠️  lookupCountryName: Skipping localhost/unknown IP:', normalized);
+    console.log('💡 TIP: For local testing, use X-Forwarded-For header with a real IP (e.g., curl -H "X-Forwarded-For: 8.8.8.8" ...)');
+    return null;
+  }
+
+  // Check cache
+  if (ipinfoCache.has(normalized)) {
+    const cached = ipinfoCache.get(normalized) as string | null;
+    console.log('📦 Using cached country for', normalized, ':', cached);
+    return cached;
+  }
+
+  const token = process.env.IPINFO_TOKEN;
+  if (!token) {
+    console.error('❌ IPINFO_TOKEN not found in environment variables!');
+    console.log('💡 Add IPINFO_TOKEN=47e5dab3e06d1c to .env.local and restart server');
+    ipinfoCache.set(normalized, null);
+    return null;
+  }
+
+  try {
+    const url = `https://api.ipinfo.io/lite/${encodeURIComponent(normalized)}?token=${encodeURIComponent(token)}`;
+    console.log('🌐 Fetching geo data from:', url);
+    
+    const res = await fetch(url, { method: "GET" });
+    console.log('📥 IPinfo response status:', res.status);
+    
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error('❌ IPinfo API error:', res.status, errorText);
+      ipinfoCache.set(normalized, null);
+      return null;
+    }
+    
+    const data = await res.json();
+    console.log('📊 IPinfo response data:', JSON.stringify(data, null, 2));
+
+    // ipinfo lite returns fields like: { ip, asn, as_name, country_code, country, ... }
+    const country = typeof data.country === "string" && data.country.length > 0 ? data.country : null;
+    console.log('🗺️  Extracted country:', country);
+    
+    ipinfoCache.set(normalized, country);
+    return country;
+  } catch (err) {
+    console.error('❌ ipinfo lookup exception for', normalized, ':', err);
+    ipinfoCache.set(normalized, null);
+    return null;
+  }
 }
 
 export async function getAnalyticsByLinkId(linkId: string): Promise<LinkAnalytics> {

@@ -34,8 +34,11 @@ export async function GET(
     const userAgent = request.headers.get("user-agent") || "unknown";
     const referer = request.headers.get("referer") || request.headers.get("referrer") || null;
 
+    // Prefer provider country header (Cloudflare/Vercel) if available
+    const providerCountry = request.headers.get('cf-ipcountry') || request.headers.get('x-vercel-ip-country') || request.headers.get('x-forwarded-country') || null;
+
     // Track the click asynchronously (don't wait for it)
-    storage.recordLinkClick(link.id, clientIp, userAgent, referer).catch((err) => {
+    storage.recordLinkClick(link.id, clientIp, userAgent, referer, providerCountry).catch((err) => {
       console.error("Failed to record click:", err);
     });
 
