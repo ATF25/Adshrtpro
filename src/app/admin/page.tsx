@@ -60,7 +60,7 @@ import {
   Bell,
   Send,
 } from "lucide-react";
-import type { User, Link as LinkType, BlogPost, PlatformStats, BannedIp, SponsoredPost, CustomAd, Notification, Announcement } from "@shared/schema";
+import type { User, Link as LinkType, BlogPost, PlatformStats, BannedIp, SponsoredPost, CustomAd, Notification, Announcement, WithdrawalRequest } from "@shared/schema";
 import { adSizeRecommendations } from "@shared/schema";
 import {
   Select,
@@ -136,6 +136,10 @@ export default function AdminPage() {
 
   const { data: posts, isLoading: postsLoading } = useQuery<BlogPost[]>({
     queryKey: ["/api/blog"],
+  });
+
+  const { data: withdrawals = [], isLoading: withdrawalsLoading } = useQuery<WithdrawalRequest[]>({
+    queryKey: ["/api/admin/withdrawals"],
   });
 
   const { data: bannedIps } = useQuery<BannedIp[]>({
@@ -509,6 +513,8 @@ export default function AdminPage() {
             </>
           )}
         </div>
+
+        
 
         <Tabs defaultValue="users">
           <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0 mb-6">

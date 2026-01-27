@@ -20,55 +20,55 @@ const socialAccounts: SocialAccount[] = [
     name: "@AdShrtPro",
     description: "Join our Telegram channel for updates, support, and community discussions.",
     url: "https://t.me/AdShrtPro",
-    color: "bg-[#0088cc]",
+    color: "bg-[#0088cc] text-white",
   },
   {
     platform: "Facebook",
     icon: SiFacebook,
     name: "AdShrtPro Official",
     description: "Follow us on Facebook for news, tips, and promotional offers.",
-    url: "https://facebook.com/AdShrtPro",
-    color: "bg-[#1877f2]",
+    url: "https://www.facebook.com/share/1AZVPszMhR/?mibextid=wwXIfr",
+    color: "bg-[#1877f2] text-white",
   },
   {
     platform: "X (Twitter)",
     icon: SiX,
     name: "@AdShrtPro",
     description: "Get the latest updates and announcements on X.",
-    url: "https://x.com/AdShrtPro",
-    color: "bg-black dark:bg-white",
+    url: "https://x.com/adshrtpro?s=21",
+    color: "bg-black text-white dark:bg-white dark:text-black",
   },
   {
     platform: "Instagram",
     icon: SiInstagram,
     name: "@adshrtpro",
     description: "Follow our Instagram for visual content and behind-the-scenes.",
-    url: "https://instagram.com/adshrtpro",
-    color: "bg-gradient-to-br from-[#833ab4] via-[#fd1d1d] to-[#fcb045]",
+    url: "https://www.instagram.com/adshrtpro/",
+    color: "bg-gradient-to-br from-[#833ab4] via-[#fd1d1d] to-[#fcb045] text-white",
   },
   {
     platform: "YouTube",
     icon: SiYoutube,
     name: "AdShrtPro",
     description: "Watch tutorials, guides, and earnings tips on our YouTube channel.",
-    url: "https://youtube.com/@AdShrtPro",
-    color: "bg-[#ff0000]",
+    url: "https://www.youtube.com/@Adshrtpro",
+    color: "bg-[#ff0000] text-white",
   },
   {
     platform: "Discord",
     icon: SiDiscord,
     name: "AdShrtPro Community",
     description: "Join our Discord server for real-time support and community chat.",
-    url: "https://discord.gg/AdShrtPro",
-    color: "bg-[#5865f2]",
+    url: "https://discord.gg/UBaW8rD9pV",
+    color: "bg-[#5865f2] text-white",
   },
   {
     platform: "TikTok",
     icon: SiTiktok,
     name: "@adshrtpro",
     description: "Check out our TikTok for quick tips and entertaining content.",
-    url: "https://tiktok.com/@adshrtpro",
-    color: "bg-black dark:bg-white dark:text-black",
+    url: "https://www.tiktok.com/@adshrtpro",
+    color: "bg-black text-white dark:bg-white dark:text-black",
   },
 ];
 
@@ -105,8 +105,8 @@ export default function SocialsPage() {
             <Card key={social.platform} className="hover-elevate">
               <CardHeader className="pb-2">
                 <div className="flex items-center gap-3">
-                  <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${social.color}`}>
-                    <social.icon className="w-6 h-6 text-white" />
+                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${social.color}`}>
+                    <social.icon className="w-6 h-6" />
                   </div>
                   <div>
                     <CardTitle className="text-lg">{social.platform}</CardTitle>

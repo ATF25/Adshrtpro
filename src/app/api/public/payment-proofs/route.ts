@@ -3,13 +3,26 @@ import * as storage from "@/lib/storage";
 
 export async function GET() {
   try {
-    const transactions = await storage.getAllTransactions();
-    const paymentProofs = transactions
-      .filter((t) => t.type === "withdrawal" && t.status === "completed")
-      .slice(0, 50)
-      .map((t) => ({ id: t.id, amount: t.amount, createdAt: t.createdAt }));
+    const withdrawals = await storage.getAllWithdrawalRequests();
 
-    return NextResponse.json(paymentProofs);
+    const proofs = await Promise.all(
+      withdrawals
+        .filter((w) => w.status === "paid" || w.status === "completed")
+        .slice(0, 50)
+        .map(async (w) => {
+          const user = await storage.getUser(w.userId);
+          const date = w.processedAt || w.requestedAt;
+          return {
+            id: w.id,
+            date: date,
+            username: user?.email?.split("@")[0] || user?.email || w.userId,
+            amount: w.amountUsd,
+            paymentMethod: w.coinType,
+          };
+        })
+    );
+
+    return NextResponse.json(proofs);
   } catch (error) {
     console.error("/api/public/payment-proofs error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Link2 } from "lucide-react";
+import { SiDiscord, SiFacebook, SiX, SiInstagram, SiTelegram, SiYoutube, SiTiktok } from "react-icons/si";
 
 export function Footer() {
   return (
@@ -67,8 +68,82 @@ export function Footer() {
           </div>
         </div>
 
-        <div className="border-t mt-8 pt-8 text-center text-sm text-muted-foreground">
-          <p>&copy; {new Date().getFullYear()} AdShrtPro. All rights reserved.</p>
+        <div className="border-t mt-8 pt-8 text-sm text-muted-foreground">
+          <div className="w-full flex flex-col md:flex-row items-center md:justify-between gap-4">
+            <p className="text-left">&copy; {new Date().getFullYear()} AdShrtPro. All rights reserved.</p>
+
+            <div className="flex items-center space-x-3">
+              <a
+                href="https://discord.gg/UBaW8rD9pV"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Discord"
+                className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-muted-foreground/10 hover:bg-muted-foreground/20 text-muted-foreground"
+              >
+                <SiDiscord className="w-4 h-4" />
+              </a>
+
+              <a
+                href="https://www.facebook.com/share/1AZVPszMhR/?mibextid=wwXIfr"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Facebook"
+                className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-muted-foreground/10 hover:bg-muted-foreground/20 text-muted-foreground"
+              >
+                <SiFacebook className="w-4 h-4" />
+              </a>
+
+              <a
+                href="https://x.com/adshrtpro?s=21"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="X"
+                className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-muted-foreground/10 hover:bg-muted-foreground/20 text-muted-foreground"
+              >
+                <SiX className="w-4 h-4" />
+              </a>
+
+              <a
+                href="https://www.instagram.com/adshrtpro/"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Instagram"
+                className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-muted-foreground/10 hover:bg-muted-foreground/20 text-muted-foreground"
+              >
+                <SiInstagram className="w-4 h-4" />
+              </a>
+
+              <a
+                href="https://t.me/AdShrtPro"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Telegram"
+                className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-muted-foreground/10 hover:bg-muted-foreground/20 text-muted-foreground"
+              >
+                <SiTelegram className="w-4 h-4" />
+              </a>
+
+              <a
+                href="https://www.youtube.com/@Adshrtpro"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="YouTube"
+                className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-muted-foreground/10 hover:bg-muted-foreground/20 text-muted-foreground"
+              >
+                <SiYoutube className="w-4 h-4" />
+              </a>
+
+              <a
+                href="https://www.tiktok.com/@adshrtpro"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="TikTok"
+                className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-muted-foreground/10 hover:bg-muted-foreground/20 text-muted-foreground"
+              >
+                <SiTiktok className="w-4 h-4" />
+              </a>
+            </div>
+          </div>
         </div>
       </div>
     </footer>
