@@ -4,16 +4,17 @@ import { z } from "zod";
 
 // Users table
 export const users = pgTable("users", {
-  id: varchar("id", { length: 36 }).primaryKey(),
+  id: varchar("id", { length: 64 }).primaryKey(),
+  clerkId: text("clerk_id").unique(),
   email: text("email").notNull().unique(),
-  password: text("password").notNull(),
+  password: text("password"),
   emailVerified: boolean("email_verified").default(false),
   verificationToken: text("verification_token"),
   analyticsUnlockExpiry: timestamp("analytics_unlock_expiry"),
   isAdmin: boolean("is_admin").default(false),
   isBanned: boolean("is_banned").default(false),
   referralCode: varchar("referral_code", { length: 10 }).unique(),
-  referredBy: varchar("referred_by", { length: 36 }),
+  referredBy: varchar("referred_by", { length: 64 }),
   socialVerified: boolean("social_verified").default(false),
   socialVerifiedAt: timestamp("social_verified_at"),
   telegramUsername: text("telegram_username"),
@@ -58,7 +59,7 @@ export const links = pgTable("links", {
   id: varchar("id", { length: 36 }).primaryKey(),
   originalUrl: text("original_url").notNull(),
   shortCode: varchar("short_code", { length: 20 }).notNull().unique(),
-  userId: varchar("user_id", { length: 36 }),
+  userId: varchar("user_id", { length: 64 }),
   creatorIp: text("creator_ip"),
   isDisabled: boolean("is_disabled").default(false),
   isBanned: boolean("is_banned").default(false),
@@ -256,7 +257,7 @@ export type SponsoredPostReaction = typeof sponsoredPostReactions.$inferSelect;
 // Notifications table
 export const notifications = pgTable("notifications", {
   id: varchar("id", { length: 36 }).primaryKey(),
-  userId: varchar("user_id", { length: 36 }),
+  userId: varchar("user_id", { length: 64 }),
   title: text("title").notNull(),
   message: text("message").notNull(),
   type: text("type").default("info"),
@@ -347,7 +348,7 @@ export const adSizeRecommendations = {
 // User balances table
 export const userBalances = pgTable("user_balances", {
   id: varchar("id", { length: 36 }).primaryKey(),
-  userId: varchar("user_id", { length: 36 }).notNull().unique(),
+  userId: varchar("user_id", { length: 64 }).notNull().unique(),
   balanceUsd: text("balance_usd").default("0"), // Stored as string for precision
   totalEarned: text("total_earned").default("0"),
   totalWithdrawn: text("total_withdrawn").default("0"),
@@ -360,7 +361,7 @@ export type UserBalance = typeof userBalances.$inferSelect;
 // Transactions table for audit trail
 export const transactions = pgTable("transactions", {
   id: varchar("id", { length: 36 }).primaryKey(),
-  userId: varchar("user_id", { length: 36 }).notNull(),
+  userId: varchar("user_id", { length: 64 }).notNull(),
   type: text("type").notNull(), // offerwall, task, referral, withdrawal
   amount: text("amount").notNull(), // USD amount as string
   description: text("description"),
@@ -376,7 +377,7 @@ export type Transaction = typeof transactions.$inferSelect;
 // Offerwall completions table (for duplicate prevention)
 export const offerwallCompletions = pgTable("offerwall_completions", {
   id: varchar("id", { length: 36 }).primaryKey(),
-  userId: varchar("user_id", { length: 36 }).notNull(),
+  userId: varchar("user_id", { length: 64 }).notNull(),
   network: text("network").notNull(), // CPAGrip, AdBlueMedia
   offerId: text("offer_id").notNull(),
   transactionId: text("transaction_id"), // Network's transaction ID
@@ -427,7 +428,7 @@ export type Task = typeof tasks.$inferSelect;
 export const taskSubmissions = pgTable("task_submissions", {
   id: varchar("id", { length: 36 }).primaryKey(),
   taskId: varchar("task_id", { length: 36 }).notNull(),
-  userId: varchar("user_id", { length: 36 }).notNull(),
+  userId: varchar("user_id", { length: 64 }).notNull(),
   proofData: text("proof_data").notNull(), // Legacy field for backward compatibility
   proofUrl: text("proof_url"), // Link proof (profile URL, post URL, etc.)
   proofText: text("proof_text"), // Text proof (username, description, etc.)
@@ -443,8 +444,8 @@ export type TaskSubmission = typeof taskSubmissions.$inferSelect;
 // Referrals table
 export const referrals = pgTable("referrals", {
   id: varchar("id", { length: 36 }).primaryKey(),
-  referrerId: varchar("referrer_id", { length: 36 }).notNull(),
-  referredId: varchar("referred_id", { length: 36 }).notNull(),
+  referrerId: varchar("referrer_id", { length: 64 }).notNull(),
+  referredId: varchar("referred_id", { length: 64 }).notNull(),
   referralCode: text("referral_code").notNull(),
   status: text("status").default("pending"), // pending, valid, credited, rejected
   linksCreated: integer("links_created").default(0),
@@ -459,7 +460,7 @@ export type Referral = typeof referrals.$inferSelect;
 // Withdrawal requests table
 export const withdrawalRequests = pgTable("withdrawal_requests", {
   id: varchar("id", { length: 36 }).primaryKey(),
-  userId: varchar("user_id", { length: 36 }).notNull(),
+  userId: varchar("user_id", { length: 64 }).notNull(),
   amountUsd: text("amount_usd").notNull(),
   coinType: text("coin_type").notNull(), // BTC, ETH, DOGE, etc.
   faucetpayEmail: text("faucetpay_email").notNull(),
@@ -498,7 +499,7 @@ export type EarningSetting = typeof earningSettings.$inferSelect;
 // Social Verification submissions table
 export const socialVerifications = pgTable("social_verifications", {
   id: varchar("id", { length: 36 }).primaryKey(),
-  userId: varchar("user_id", { length: 36 }).notNull().unique(),
+  userId: varchar("user_id", { length: 64 }).notNull().unique(),
   screenshotLinks: text("screenshot_links").notNull(),
   status: text("status").default("pending"), // pending, approved, rejected
   adminNotes: text("admin_notes"),

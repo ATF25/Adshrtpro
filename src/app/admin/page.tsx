@@ -435,7 +435,7 @@ export default function AdminPage() {
             <p className="text-muted-foreground mb-6">
               Sign in to your admin account to manage the platform.
             </p>
-            <Link href="/login">
+            <Link href="/sign-in">
               <Button data-testid="button-admin-login">Sign in to Admin Panel</Button>
             </Link>
           </CardContent>

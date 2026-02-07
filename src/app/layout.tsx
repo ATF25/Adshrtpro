@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { ClerkProvider } from "@clerk/nextjs";
 import { ThemeProvider } from "@/lib/theme-context";
 import { QueryProvider } from "@/lib/query-provider";
 import { AuthProvider } from "@/lib/auth-context";
@@ -25,20 +26,22 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        <ThemeProvider>
-          <QueryProvider>
-            <AuthProvider>
-              <div className="min-h-screen flex flex-col">
-                <Navigation />
-                <AnnouncementBanner />
-                <main className="flex-1">{children}</main>
-                <Footer />
-              </div>
-              <Toaster />
-              <UnregisterServiceWorker />
-            </AuthProvider>
-          </QueryProvider>
-        </ThemeProvider>
+        <ClerkProvider>
+          <ThemeProvider>
+            <QueryProvider>
+              <AuthProvider>
+                <div className="min-h-screen flex flex-col">
+                  <Navigation />
+                  <AnnouncementBanner />
+                  <main className="flex-1">{children}</main>
+                  <Footer />
+                </div>
+                <Toaster />
+                <UnregisterServiceWorker />
+              </AuthProvider>
+            </QueryProvider>
+          </ThemeProvider>
+        </ClerkProvider>
       </body>
     </html>
   );

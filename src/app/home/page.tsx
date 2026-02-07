@@ -166,7 +166,7 @@ export default function HomePage() {
 
           {!user && (
             <p className="text-sm text-muted-foreground mt-6">
-              <Link href="/register" className="text-primary hover:underline">
+              <Link href="/sign-up" className="text-primary hover:underline">
                 Sign up
               </Link>{" "}
               to manage your links and access full analytics.
@@ -336,7 +336,7 @@ export default function HomePage() {
             Join thousands of users who trust AdShrtPro for their link management needs.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link href="/register">
+            <Link href="/sign-up">
               <Button
                 size="lg"
                 variant="secondary"

@@ -48,7 +48,7 @@ export default function EarnPage() {
       <div className="container mx-auto px-4 py-16 text-center">
         <h1 className="text-3xl font-bold mb-4">Earn Rewards</h1>
         <p className="text-muted-foreground mb-6">Please log in to access earning features.</p>
-        <Link href="/login">
+        <Link href="/sign-in">
           <Button data-testid="button-login">Log In</Button>
         </Link>
       </div>

@@ -78,7 +78,7 @@ export default function ForgotPasswordPage() {
               <p className="text-muted-foreground mb-6">
                 If an account exists with that email, we've sent password reset instructions.
               </p>
-              <Link href="/login">
+              <Link href="/sign-in">
                 <Button variant="outline" className="w-full" data-testid="button-back-login">
                   <ArrowLeft className="w-4 h-4 mr-2" />
                   Back to login
@@ -152,7 +152,7 @@ export default function ForgotPasswordPage() {
             </Form>
 
             <div className="mt-6 text-center text-sm">
-              <Link href="/login" className="text-primary font-medium hover:underline inline-flex items-center gap-1" data-testid="link-login">
+              <Link href="/sign-in" className="text-primary font-medium hover:underline inline-flex items-center gap-1" data-testid="link-login">
                 <ArrowLeft className="w-4 h-4" />
                 Back to login
               </Link>

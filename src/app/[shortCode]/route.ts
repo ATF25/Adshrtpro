@@ -4,12 +4,20 @@ import * as storage from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 
+// Known file extensions and static paths that are NOT short codes
+const STATIC_PATTERN = /\.(ico|png|jpg|jpeg|gif|svg|webp|css|js|map|txt|xml|json|woff2?|ttf|eot)$/i;
+
 // Handle short URL redirects
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ shortCode: string }> }
 ) {
   const { shortCode } = await params;
+
+  // Skip static file requests that leaked through
+  if (STATIC_PATTERN.test(shortCode)) {
+    return new NextResponse(null, { status: 404 });
+  }
 
   try {
     // Get the link by short code

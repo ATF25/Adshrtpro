@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useTheme } from "@/lib/theme-context";
+import { SignedIn, SignedOut, UserButton, SignInButton, SignUpButton, useClerk } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -31,8 +32,9 @@ import {
 import { NotificationBell } from "@/components/notification-bell";
 
 export function Navigation() {
-  const { user, logout, isLoading, isLoggingOut } = useAuth();
+  const { user, isLoading } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const { signOut } = useClerk();
   const location = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -108,85 +110,88 @@ export function Navigation() {
 
           {user && <NotificationBell />}
 
-          {!isLoading && (
-            <>
-              {user ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" data-testid="button-user-menu">
-                      <User className="w-4 h-4 mr-2" />
-                      <span className="hidden sm:inline max-w-[120px] truncate">
-                        {user.email}
-                      </span>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
+          <SignedIn>
+            <div className="hidden sm:flex items-center gap-3">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" data-testid="button-user-menu">
+                    <User className="w-4 h-4 mr-2" />
+                    <span className="hidden sm:inline max-w-[120px] truncate">
+                      {user?.email || "Account"}
+                    </span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  {user?.email && (
                     <div className="px-2 py-1.5 text-sm text-muted-foreground">
                       {user.email}
                     </div>
-                    <DropdownMenuSeparator />
-                    <Link href="/dashboard">
-                      <DropdownMenuItem data-testid="link-dropdown-dashboard">
-                        <LayoutDashboard className="w-4 h-4 mr-2" />
-                        Dashboard
-                      </DropdownMenuItem>
-                    </Link>
-                    <Link href="/analytics">
-                      <DropdownMenuItem data-testid="link-dropdown-analytics">
-                        <BarChart3 className="w-4 h-4 mr-2" />
-                        Analytics
-                      </DropdownMenuItem>
-                    </Link>
-                    <Link href="/earn">
-                      <DropdownMenuItem data-testid="link-dropdown-earn">
-                        <DollarSign className="w-4 h-4 mr-2" />
-                        Earn
-                      </DropdownMenuItem>
-                    </Link>
-                    <Link href="/qr-codes">
-                      <DropdownMenuItem data-testid="link-dropdown-qr">
-                        <QrCode className="w-4 h-4 mr-2" />
-                        QR Codes
-                      </DropdownMenuItem>
-                    </Link>
-                    {user.isAdmin && (
-                      <>
-                        <DropdownMenuSeparator />
-                        <Link href="/admin">
-                          <DropdownMenuItem data-testid="link-dropdown-admin">
-                            <Settings className="w-4 h-4 mr-2" />
-                            Admin Panel
-                          </DropdownMenuItem>
-                        </Link>
-                      </>
-                    )}
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => logout()}
-                      disabled={isLoggingOut}
-                      data-testid="button-logout"
-                    >
-                      <LogOut className="w-4 h-4 mr-2" />
-                      {isLoggingOut ? "Logging out..." : "Log out"}
+                  )}
+                  <DropdownMenuSeparator />
+                  <Link href="/dashboard">
+                    <DropdownMenuItem data-testid="link-dropdown-dashboard">
+                      <LayoutDashboard className="w-4 h-4 mr-2" />
+                      Dashboard
                     </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : (
-                <div className="hidden sm:flex items-center gap-2">
-                  <Link href="/login">
-                    <Button variant="ghost" size="sm" data-testid="link-login">
-                      Log in
-                    </Button>
                   </Link>
-                  <Link href="/register">
-                    <Button size="sm" data-testid="link-register">
-                      Sign up
-                    </Button>
+                  <Link href="/analytics">
+                    <DropdownMenuItem data-testid="link-dropdown-analytics">
+                      <BarChart3 className="w-4 h-4 mr-2" />
+                      Analytics
+                    </DropdownMenuItem>
                   </Link>
-                </div>
-              )}
-            </>
-          )}
+                  <Link href="/earn">
+                    <DropdownMenuItem data-testid="link-dropdown-earn">
+                      <DollarSign className="w-4 h-4 mr-2" />
+                      Earn
+                    </DropdownMenuItem>
+                  </Link>
+                  <Link href="/qr-codes">
+                    <DropdownMenuItem data-testid="link-dropdown-qr">
+                      <QrCode className="w-4 h-4 mr-2" />
+                      QR Codes
+                    </DropdownMenuItem>
+                  </Link>
+                  {user?.isAdmin && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <Link href="/admin">
+                        <DropdownMenuItem data-testid="link-dropdown-admin">
+                          <Settings className="w-4 h-4 mr-2" />
+                          Admin Panel
+                        </DropdownMenuItem>
+                      </Link>
+                    </>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => signOut({ redirectUrl: '/home' })}
+                    data-testid="button-logout"
+                    className="text-red-600 dark:text-red-400"
+                  >
+                    <LogOut className="w-4 h-4 mr-2" />
+                    Sign out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <UserButton afterSignOutUrl="/home" />
+            </div>
+          </SignedIn>
+
+          <SignedOut>
+            <div className="hidden sm:flex items-center gap-2">
+              <SignInButton mode="redirect">
+                <Button variant="ghost" size="sm" data-testid="link-login">
+                  Log in
+                </Button>
+              </SignInButton>
+              <SignUpButton mode="redirect">
+                <Button size="sm" data-testid="link-register">
+                  Sign up
+                </Button>
+              </SignUpButton>
+            </div>
+          </SignedOut>
 
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild className="md:hidden">
@@ -247,24 +252,22 @@ export function Navigation() {
                         </Button>
                       </Link>
                     )}
-                    <Button
-                      variant="ghost"
-                      className="w-full justify-start text-destructive"
-                      disabled={isLoggingOut}
-                      onClick={() => {
-                        logout();
-                        setMobileOpen(false);
-                      }}
-                    >
-                      <LogOut className="w-4 h-4 mr-2" />
-                      {isLoggingOut ? "Logging out..." : "Log out"}
-                    </Button>
+                    <div className="border-t pt-4 mt-2 px-4 flex flex-col gap-2">
+                      <Button
+                        variant="destructive"
+                        className="w-full justify-start"
+                        onClick={() => { setMobileOpen(false); signOut({ redirectUrl: '/home' }); }}
+                      >
+                        <LogOut className="w-4 h-4 mr-2" />
+                        Sign out
+                      </Button>
+                    </div>
                   </>
                 )}
 
-                {!user && !isLoading && (
+                <SignedOut>
                   <div className="border-t pt-4 mt-2 flex flex-col gap-2">
-                    <Link href="/login">
+                    <SignInButton mode="redirect">
                       <Button
                         variant="outline"
                         className="w-full"
@@ -272,17 +275,17 @@ export function Navigation() {
                       >
                         Log in
                       </Button>
-                    </Link>
-                    <Link href="/register">
+                    </SignInButton>
+                    <SignUpButton mode="redirect">
                       <Button
                         className="w-full"
                         onClick={() => setMobileOpen(false)}
                       >
                         Sign up
                       </Button>
-                    </Link>
+                    </SignUpButton>
                   </div>
-                )}
+                </SignedOut>
               </div>
             </SheetContent>
           </Sheet>

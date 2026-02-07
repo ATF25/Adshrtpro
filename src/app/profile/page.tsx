@@ -86,7 +86,7 @@ export default function ProfilePage() {
       <div className="container mx-auto px-4 py-16 text-center">
         <h1 className="text-3xl font-bold mb-4">Profile</h1>
         <p className="text-muted-foreground mb-6">Please log in to view your profile.</p>
-        <Link href="/login">
+        <Link href="/sign-in">
           <Button data-testid="button-login">Log In</Button>
         </Link>
       </div>
@@ -200,13 +200,13 @@ export default function ProfilePage() {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground mb-4">
-              To change your password, use the forgot password feature.
+              Password and security settings are managed through your Clerk account.
             </p>
-            <Link href="/forgot-password">
+            <a href="https://accounts.clerk.dev/user" target="_blank" rel="noopener noreferrer">
               <Button variant="outline" data-testid="button-change-password">
-                Change Password
+                Manage Security Settings
               </Button>
-            </Link>
+            </a>
           </CardContent>
         </Card>
       </div>

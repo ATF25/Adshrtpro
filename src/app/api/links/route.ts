@@ -43,14 +43,16 @@ export async function POST(req: Request) {
       }
     }
 
-    // Try to get user ID if authenticated
+    // Try to get user ID if authenticated (via Clerk)
     let userId: string | undefined;
-    const headersObj: Record<string, string | undefined> = {};
-    req.headers.forEach((value, key) => (headersObj[key] = value));
-    const { getUserFromHeaders } = await import("@/lib/server/jwt");
-    const jwtUser = getUserFromHeaders(headersObj as any);
-    if (jwtUser) {
-      userId = jwtUser.userId;
+    try {
+      const { auth } = await import("@clerk/nextjs/server");
+      const authResult = await auth();
+      if (authResult.userId) {
+        userId = authResult.userId;
+      }
+    } catch {
+      // Not authenticated, continue without user
     }
 
     const link = await storage.createLink(data, userId, ip);

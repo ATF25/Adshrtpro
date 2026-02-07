@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ExternalLink, AlertCircle, DollarSign, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { getAuthToken } from "@/lib/queryClient";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -49,15 +48,9 @@ function OfferwallOffers({ userId, network }: { userId: string; network: "cpagri
     const fetchOffers = async () => {
       try {
         setLoading(true);
-        const token = getAuthToken();
-        const headers: Record<string, string> = {};
-        
-        if (token) {
-          headers["Authorization"] = `Bearer ${token}`;
-        }
         
         const response = await fetch(`/api/offerwalls/${network}/offers?userId=${userId}`, {
-          headers,
+          credentials: "include", // Send Clerk session cookies
         });
         if (!response.ok) throw new Error("Failed to fetch offers");
         const data = await response.json();
@@ -154,7 +147,7 @@ export default function OfferwallsPage() {
       <div className="container mx-auto px-4 py-16 text-center">
         <h1 className="text-3xl font-bold mb-4">Offerwalls</h1>
         <p className="text-muted-foreground mb-6">Please log in to access offerwalls.</p>
-        <Link href="/login">
+        <Link href="/sign-in">
           <Button data-testid="button-login">Log In</Button>
         </Link>
       </div>

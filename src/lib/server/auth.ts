@@ -1,23 +1,38 @@
 import { NextResponse } from "next/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import * as storage from "@/lib/storage";
-import { getUserFromHeaders, type JWTPayload } from "./jwt";
 
-// Helper to get current user from request
-export async function getCurrentUser(req: Request): Promise<{ user: any; jwtUser: JWTPayload } | null> {
-  const headersObj: Record<string, string | undefined> = {};
-  req.headers.forEach((value, key) => (headersObj[key] = value));
+// Helper to get current user from Clerk auth + database
+export async function getCurrentUser(req: Request): Promise<{ user: any; clerkUserId: string } | null> {
+  const { userId } = await auth();
+  if (!userId) return null;
 
-  const jwtUser = getUserFromHeaders(headersObj as any);
-  if (!jwtUser) return null;
+  // Look up user in our database by Clerk ID
+  let user = await storage.getUser(userId);
 
-  const user = await storage.getUser(jwtUser.userId);
-  if (!user) return null;
+  // If not found by Clerk ID, try email lookup (legacy user not yet migrated)
+  if (!user) {
+    const clerkUser = await currentUser();
+    if (!clerkUser) return null;
 
-  return { user, jwtUser };
+    const email = clerkUser.emailAddresses[0]?.emailAddress;
+    if (!email) return null;
+
+    const legacyUser = await storage.getUserByEmail(email);
+    if (legacyUser) {
+      // Return the legacy user — migration will happen via /api/auth/me
+      return { user: legacyUser, clerkUserId: userId };
+    }
+
+    // No user at all — they need to hit /api/auth/me first to create their account
+    return null;
+  }
+
+  return { user, clerkUserId: userId };
 }
 
 // Middleware to require authentication
-export async function requireAuth(req: Request): Promise<{ user: any; jwtUser: JWTPayload } | NextResponse> {
+export async function requireAuth(req: Request): Promise<{ user: any; clerkUserId: string } | NextResponse> {
   const result = await getCurrentUser(req);
   if (!result) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
@@ -26,7 +41,7 @@ export async function requireAuth(req: Request): Promise<{ user: any; jwtUser: J
 }
 
 // Middleware to require admin
-export async function requireAdmin(req: Request): Promise<{ user: any; jwtUser: JWTPayload } | NextResponse> {
+export async function requireAdmin(req: Request): Promise<{ user: any; clerkUserId: string } | NextResponse> {
   const result = await getCurrentUser(req);
   if (!result) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });

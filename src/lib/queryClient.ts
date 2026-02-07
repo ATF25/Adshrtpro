@@ -1,20 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
-// Token management
-const TOKEN_KEY = "auth_token";
-
-export function getAuthToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-export function setAuthToken(token: string): void {
-  localStorage.setItem(TOKEN_KEY, token);
-}
-
-export function removeAuthToken(): void {
-  localStorage.removeItem(TOKEN_KEY);
-}
-
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
@@ -27,18 +12,13 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  const token = getAuthToken();
   const headers: Record<string, string> = data ? { "Content-Type": "application/json" } : {};
-  
-  // Add Authorization header if token exists
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
 
   const res = await fetch(url, {
     method,
     headers,
     body: data ? JSON.stringify(data) : undefined,
+    credentials: "include", // Send Clerk session cookies
   });
 
   await throwIfResNotOk(res);
@@ -51,15 +31,8 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const token = getAuthToken();
-    const headers: Record<string, string> = {};
-    
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
-    }
-
     const res = await fetch(queryKey.join("/") as string, {
-      headers,
+      credentials: "include", // Send Clerk session cookies
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {

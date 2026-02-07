@@ -115,7 +115,7 @@ function ResetPasswordContent() {
               <p className="text-muted-foreground mb-6">
                 Your password has been updated. You can now log in with your new password.
               </p>
-              <Link href="/login">
+              <Link href="/sign-in">
                 <Button className="w-full" data-testid="button-login">
                   Go to Login
                 </Button>
