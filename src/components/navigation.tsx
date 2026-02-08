@@ -174,7 +174,7 @@ export function Navigation() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <UserButton afterSignOutUrl="/home" />
+              <UserButton />
             </div>
           </SignedIn>
 
