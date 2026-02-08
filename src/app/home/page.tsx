@@ -103,7 +103,7 @@ export default function HomePage() {
     {
       icon: BarChart3,
       title: "Click Analytics",
-      description: "Track clicks, countries, devices, browsers, and referrers with detailed insights.",
+      description: "Track clicks, countries, devices, browsers, and referrers with detailed insights",
     },
     {
       icon: QrCode,
