@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth-context";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,7 +22,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Link2, Copy, Check, ExternalLink, Loader2, AlertTriangle, Clock } from "lucide-react";
+import { Link2, Copy, Check, ExternalLink, Loader2, AlertTriangle, Clock, XCircle } from "lucide-react";
 import type { Link } from "@shared/schema";
 import { addDays, addHours } from "date-fns";
 
@@ -60,11 +62,14 @@ interface ShortenedResult {
 
 export function UrlShortener() {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const router = useRouter();
   const [useCustomAlias, setUseCustomAlias] = useState(false);
   const [useExpiration, setUseExpiration] = useState(false);
   const [expirationOption, setExpirationOption] = useState("never");
   const [result, setResult] = useState<ShortenedResult | null>(null);
   const [copied, setCopied] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const form = useForm<ShortenInput>({
     resolver: zodResolver(shortenSchema),
@@ -74,6 +79,18 @@ export function UrlShortener() {
       expiresAt: "",
     },
   });
+
+  // After sign-up, auto-fill any URL the guest was trying to shorten
+  useEffect(() => {
+    if (user) {
+      const pendingUrl = localStorage.getItem("pendingShortUrl");
+      if (pendingUrl) {
+        localStorage.removeItem("pendingShortUrl");
+        form.setValue("originalUrl", pendingUrl);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   const shortenMutation = useMutation({
     mutationFn: async (data: ShortenInput) => {
@@ -87,6 +104,7 @@ export function UrlShortener() {
     },
     onSuccess: (data) => {
       setResult(data);
+      setErrorMessage(null);
       form.reset();
       queryClient.invalidateQueries({ queryKey: ["/api/links"] });
       toast({
@@ -95,11 +113,16 @@ export function UrlShortener() {
       });
     },
     onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to shorten URL",
-        variant: "destructive",
-      });
+      // Parse clean message from "422: {\"message\":\"...\"}" format
+      let clean = error.message || "Failed to shorten URL";
+      const jsonMatch = clean.match(/^\d+:\s*(\{.*\})$/);
+      if (jsonMatch) {
+        try {
+          const parsed = JSON.parse(jsonMatch[1]);
+          if (parsed?.message) clean = parsed.message;
+        } catch {}
+      }
+      setErrorMessage(clean);
     },
   });
 
@@ -116,6 +139,13 @@ export function UrlShortener() {
   };
 
   const onSubmit = (data: ShortenInput) => {
+    setErrorMessage(null);
+    if (!user) {
+      // Save the URL so we can restore it after sign-up
+      try { localStorage.setItem("pendingShortUrl", data.originalUrl); } catch {}
+      router.push("/sign-up");
+      return;
+    }
     shortenMutation.mutate(data);
   };
 
@@ -239,6 +269,16 @@ export function UrlShortener() {
           </Card>
         </form>
       </Form>
+
+      {errorMessage && (
+        <div className="mt-4 flex items-start gap-3 rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-destructive dark:border-destructive dark:bg-destructive/20" data-testid="error-blocked-url">
+          <XCircle className="w-5 h-5 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold text-sm">URL Not Allowed</p>
+            <p className="text-sm mt-0.5 opacity-90">{errorMessage}</p>
+          </div>
+        </div>
+      )}
 
       {result && (
         <Card className="mt-6 bg-primary/5 border-primary/20">

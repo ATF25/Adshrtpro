@@ -9,7 +9,10 @@ const isProtectedRoute = createRouteMatcher([
   "/earn(.*)",
   "/socials(.*)",
   "/admin(.*)",
-  "/api/links(.*)",
+  // NOTE: /api/links (GET + POST) is NOT listed here.
+  //   - GET /api/links uses requireAuth() inside the route handler (returns 401 JSON for guests)
+  //   - POST /api/links supports both authenticated and anonymous link creation
+  //   Individual link operations are still auth-gated by requireAuth() in their handlers.
   "/api/analytics(.*)",
   "/api/notifications(.*)",
   "/api/earning(.*)",

@@ -927,6 +927,73 @@ export default function AdminPage() {
                   )}
                 </CardContent>
               </Card>
+
+              {/* ── URL Content Filtering ── */}
+              <Card className="lg:col-span-2">
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <Shield className="w-5 h-5 text-red-500" />
+                    <CardTitle>URL Content Filtering</CardTitle>
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Adult, illegal, and harmful URLs are blocked automatically. Use the fields below to extend the blocklist with your own domains and keywords.
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <Label className="font-semibold flex items-center gap-1.5">
+                        <Ban className="w-4 h-4 text-red-500" />
+                        Blocked Domains
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        One domain per line or comma-separated. No protocol needed (e.g.{" "}
+                        <code className="font-mono bg-muted px-1 rounded text-foreground">example.com</code>
+                        ). Subdomains are matched automatically.
+                      </p>
+                      <Textarea
+                        placeholder={"example-adult.com\nbadsite.org, another.net"}
+                        className="min-h-[160px] font-mono text-sm"
+                        key={`blocked-domains-${settings?.blockedDomains}`}
+                        defaultValue={settings?.blockedDomains || ""}
+                        onBlur={(e) =>
+                          updateSettingsMutation.mutate({ blockedDomains: e.target.value })
+                        }
+                        data-testid="textarea-blocked-domains"
+                      />
+                      <p className="text-xs text-muted-foreground">Saved when you click away.</p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="font-semibold flex items-center gap-1.5">
+                        <Ban className="w-4 h-4 text-red-500" />
+                        Blocked Keywords
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        One keyword per line or comma-separated. Matched against the full URL (hostname + path). Case-insensitive.
+                      </p>
+                      <Textarea
+                        placeholder={"adult-content\nbadword, anotherterm"}
+                        className="min-h-[160px] font-mono text-sm"
+                        key={`blocked-keywords-${settings?.blockedKeywords}`}
+                        defaultValue={settings?.blockedKeywords || ""}
+                        onBlur={(e) =>
+                          updateSettingsMutation.mutate({ blockedKeywords: e.target.value })
+                        }
+                        data-testid="textarea-blocked-keywords"
+                      />
+                      <p className="text-xs text-muted-foreground">Saved when you click away.</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 p-3 rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-sm text-amber-800 dark:text-amber-300 flex gap-2">
+                    <Shield className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                    <span>
+                      A built-in blocklist of adult sites and known malware hosts is always active regardless of these settings. The fields above are for additional custom rules only.
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </TabsContent>
 
@@ -943,6 +1010,7 @@ export default function AdminPage() {
                   data-testid="button-add-sponsored"
                 >
                   <Plus className="w-4 h-4 mr-2" />
+
                   Add Sponsored Post
                 </Button>
               </CardHeader>

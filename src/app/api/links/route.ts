@@ -3,6 +3,7 @@ import * as storage from "@/lib/storage";
 import { requireAuth, getClientIp, getCurrentMonth } from "@/lib/server/auth";
 import { insertLinkSchema } from "@shared/schema";
 import { z } from "zod";
+import { checkUrl } from "@/lib/url-filter";
 
 // Get user's links
 export async function GET(req: Request) {
@@ -34,6 +35,15 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const data = insertLinkSchema.parse(body);
+
+    // Content filter — block adult, illegal, or harmful URLs
+    const filterResult = await checkUrl(data.originalUrl);
+    if (filterResult.blocked) {
+      return NextResponse.json(
+        { message: filterResult.reason || "This URL is not permitted on our platform." },
+        { status: 422 }
+      );
+    }
 
     // Check for duplicate short code
     if (data.shortCode) {

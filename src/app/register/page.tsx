@@ -7,7 +7,9 @@ export default function RegisterPage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace("/sign-up");
+    // Preserve all query params (e.g. ?ref=CODE for referrals)
+    const search = window.location.search;
+    router.replace(search ? `/sign-up${search}` : "/sign-up");
   }, [router]);
 
   return (

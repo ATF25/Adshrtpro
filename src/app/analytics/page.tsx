@@ -35,6 +35,7 @@ import {
   Clock,
   MousePointer,
   Play,
+  RefreshCw,
 } from "lucide-react";
 import { AdDisplay } from "@/components/ad-display";
 import { SEO } from "@/components/seo";
@@ -162,11 +163,19 @@ function AnalyticsContent() {
 
   // Query for analytics data - only when unlocked
   const analyticsEnabled = Boolean(selectedLinkId) && isUnlocked;
-  const { data: analytics, isLoading: analyticsLoading, error: analyticsError, isError: analyticsIsError } = useQuery<LinkAnalytics>({
+  const {
+    data: analytics,
+    isLoading: analyticsLoading,
+    error: analyticsError,
+    isError: analyticsIsError,
+    refetch: refetchAnalytics,
+    isRefetching: isRefetchingAnalytics,
+  } = useQuery<LinkAnalytics>({
     queryKey: ["/api/analytics", selectedLinkId],
     enabled: analyticsEnabled,
     retry: false, // Don't retry on 403
-    staleTime: 10000, // Refetch after 10 seconds
+    staleTime: 10000,
+    refetchInterval: analyticsEnabled ? 60000 : false, // Auto-refresh every 60 s when unlocked
   });
 
   // Handle 403 error by relocking - immediately lock UI and clear cached data
@@ -327,12 +336,27 @@ function AnalyticsContent() {
             <p className="text-muted-foreground">Track your link performance</p>
           </div>
 
-          {isUnlocked && countdown !== "00:00" && (
-            <Badge variant="outline" className="gap-2" data-testid="countdown-badge">
-              <Clock className="w-4 h-4" />
-              Access expires in {countdown}
-            </Badge>
-          )}
+          <div className="flex items-center gap-3 flex-wrap">
+            {isUnlocked && countdown !== "00:00" && (
+              <Badge variant="outline" className="gap-2" data-testid="countdown-badge">
+                <Clock className="w-4 h-4" />
+                Access expires in {countdown}
+              </Badge>
+            )}
+            {isUnlocked && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => refetchAnalytics()}
+                disabled={isRefetchingAnalytics}
+                data-testid="button-refresh-analytics"
+                className="gap-2"
+              >
+                <RefreshCw className={`w-4 h-4 transition-transform ${isRefetchingAnalytics ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+            )}
+          </div>
         </div>
 
         {linksLoading ? (

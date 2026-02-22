@@ -20,7 +20,7 @@ function makeLinksClickable(text: string) {
   const urlRegex = /(https?:\/\/[^\s]+)/g;
   const parts = text.split(urlRegex);
   return parts.map((part, index) => {
-    if (urlRegex.test(part)) {
+    if (/^https?:\/\//.test(part)) {
       return (
         <a
           key={index}
@@ -347,7 +347,7 @@ export default function TasksPage() {
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <CardTitle className="text-lg">{task.title}</CardTitle>
-                    <CardDescription>{task.description}</CardDescription>
+                    <div className="text-sm text-muted-foreground mt-0.5">{makeLinksClickable(task.description)}</div>
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     <Badge variant="outline" className="text-green-600 border-green-600">

@@ -50,7 +50,7 @@ export default function ReferralsPage() {
     );
   }
 
-  const referralUrl = `${window.location.origin}/register?ref=${data?.referralCode || ""}`;
+  const referralUrl = `${window.location.origin}/sign-up?ref=${data?.referralCode || ""}`;
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(referralUrl);

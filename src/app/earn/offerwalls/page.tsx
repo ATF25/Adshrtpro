@@ -11,11 +11,6 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 const OFFERWALL_CONFIG = {
-  cpagrip: {
-    name: "CPAGrip",
-    description: "Complete surveys and offers to earn rewards",
-    color: "bg-blue-500",
-  },
   adbluemedia: {
     name: "AdBlueMedia",
     description: "High-paying offers and downloads",
@@ -39,7 +34,7 @@ interface Offer {
   image?: string;
 }
 
-function OfferwallOffers({ userId, network }: { userId: string; network: "cpagrip" | "adbluemedia" }) {
+function OfferwallOffers({ userId, network }: { userId: string; network: "adbluemedia" }) {
   const [offers, setOffers] = useState<Offer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -196,8 +191,8 @@ export default function OfferwallsPage() {
           </CardContent>
         </Card>
       ) : (
-        <Tabs defaultValue="cpagrip" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2">
+        <Tabs defaultValue="adbluemedia" className="space-y-6">
+          <TabsList className="w-auto">
             {Object.entries(OFFERWALL_CONFIG).map(([key, config]) => {
               const isEnabled = enabledOfferwalls.some(o => o.network === key);
               if (!isEnabled) return null;
@@ -231,10 +226,7 @@ export default function OfferwallsPage() {
                     <p className="text-sm text-muted-foreground mb-4">
                       Complete offers from {config.name} to earn USD. Rewards are credited automatically.
                     </p>
-                    
-                    {(key === "cpagrip" || key === "adbluemedia") && (
-                      <OfferwallOffers userId={user.id} network={key as "cpagrip" | "adbluemedia"} />
-                    )}
+                    <OfferwallOffers userId={user.id} network={key as "adbluemedia"} />
                   </CardContent>
                 </Card>
               </TabsContent>
