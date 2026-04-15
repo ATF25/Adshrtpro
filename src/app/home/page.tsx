@@ -31,10 +31,25 @@ import {
   TrendingUp,
   Lock,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import type { Link as LinkType } from "@shared/schema";
 import { SiBitcoin, SiEthereum, SiDogecoin, SiLitecoin } from "react-icons/si";
+
+declare global {
+  interface Window {
+    aclib?: {
+      runBanner: (options: { zoneId: string }) => void;
+    };
+    atOptions?: {
+      key: string;
+      format: string;
+      height: number;
+      width: number;
+      params: Record<string, unknown>;
+    };
+  }
+}
 
 interface PaymentProof {
   id: string;
@@ -94,6 +109,10 @@ export default function HomePage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const aclibLeaderboardRef = useRef<HTMLDivElement>(null);
+  const aclibMediumRef = useRef<HTMLDivElement>(null);
+  const highPerfBannerRef = useRef<HTMLDivElement>(null);
+  const untimelyBannerRef = useRef<HTMLDivElement>(null);
 
   const { data: recentLinks, isLoading } = useQuery<LinkType[]>({
     queryKey: ["/api/links"],
@@ -111,6 +130,88 @@ export default function HomePage() {
   });
 
   const totalPaidOut = parseFloat(publicStats?.totalPaidOut || "0");
+
+  useEffect(() => {
+    const injectAClibBanner = (container: HTMLDivElement, zoneId: string) => {
+      container.innerHTML = "";
+      const script = document.createElement("script");
+      script.type = "text/javascript";
+      script.text = `aclib.runBanner({ zoneId: '${zoneId}' });`;
+      container.appendChild(script);
+    };
+
+    const injectHighPerformanceBanner = (container: HTMLDivElement) => {
+      container.innerHTML = "";
+      window.atOptions = {
+        key: "0525861523c63e51a6085fa7ae6b8580",
+        format: "iframe",
+        height: 60,
+        width: 468,
+        params: {},
+      };
+
+      const invokeScript = document.createElement("script");
+      invokeScript.src = "https://www.highperformanceformat.com/0525861523c63e51a6085fa7ae6b8580/invoke.js";
+      invokeScript.async = true;
+      container.appendChild(invokeScript);
+    };
+
+    const injectUntimelyBanner = (container: HTMLDivElement) => {
+      container.innerHTML = "";
+      const script = document.createElement("script");
+      script.type = "text/javascript";
+      script.text = `(function(solyz){
+var d = document,
+    s = d.createElement('script'),
+    l = d.scripts[d.scripts.length - 1];
+s.settings = solyz || {};
+s.src = "//untimely-hello.com/bGXVVys.dHGald0JYnWRcc/-e/m/9pu-ZzUzlikXPmTMYZ5cN_DTco5BNSDFEytaNqjXk/0qNkzDk/0BNiQe";
+s.async = true;
+s.referrerPolicy = 'no-referrer-when-downgrade';
+l.parentNode.insertBefore(s, l);
+})({});`;
+      container.appendChild(script);
+    };
+
+    const renderAClibSlots = () => {
+      if (window.aclib && aclibLeaderboardRef.current) {
+        injectAClibBanner(aclibLeaderboardRef.current, "11180994");
+      }
+
+      if (window.aclib && aclibMediumRef.current) {
+        injectAClibBanner(aclibMediumRef.current, "11181038");
+      }
+    };
+
+    const existingAClibScript = document.querySelector<HTMLScriptElement>("script[data-aclib-loader='true']");
+
+    if (existingAClibScript) {
+      if (window.aclib) {
+        renderAClibSlots();
+      } else {
+        existingAClibScript.addEventListener("load", renderAClibSlots, {
+          once: true,
+        });
+      }
+    } else {
+      const aclibScript = document.createElement("script");
+      aclibScript.id = "aclib";
+      aclibScript.type = "text/javascript";
+      aclibScript.src = "https://acscdn.com/script/aclib.js";
+      aclibScript.async = true;
+      aclibScript.dataset.aclibLoader = "true";
+      aclibScript.addEventListener("load", renderAClibSlots, { once: true });
+      document.head.appendChild(aclibScript);
+    }
+
+    if (highPerfBannerRef.current) {
+      injectHighPerformanceBanner(highPerfBannerRef.current);
+    }
+
+    if (untimelyBannerRef.current) {
+      injectUntimelyBanner(untimelyBannerRef.current);
+    }
+  }, []);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -344,6 +445,27 @@ export default function HomePage() {
               </p>
               <p className="text-sm font-medium text-muted-foreground">Total Paid Out</p>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="px-4 pb-6">
+        <div className="max-w-7xl mx-auto space-y-6">
+          <div className="flex justify-center overflow-x-auto">
+            <div ref={aclibLeaderboardRef} className="min-h-[60px] min-w-[320px]" />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+            <div className="flex justify-center overflow-x-auto">
+              <div ref={aclibMediumRef} className="min-h-[250px] min-w-[300px]" />
+            </div>
+            <div className="flex justify-center overflow-x-auto">
+              <div ref={highPerfBannerRef} className="min-h-[60px] min-w-[468px]" />
+            </div>
+          </div>
+
+          <div className="flex justify-center overflow-x-auto">
+            <div ref={untimelyBannerRef} className="min-h-[250px] min-w-[300px]" />
           </div>
         </div>
       </section>

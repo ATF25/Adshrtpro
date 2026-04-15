@@ -607,6 +607,23 @@ function AnalyticsContent() {
           </>
         )}
 
+        <Card className="mt-8 border-dashed">
+          <CardHeader>
+            <CardTitle className="text-lg">Analysis Partner Link</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <a
+              href="https://www.profitablecpmratenetwork.com/dqzc2wab0u?key=b064760682fbe759ee8ec75166caf5c7"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 text-primary hover:underline"
+            >
+              Open analysis link
+              <ExternalLink className="w-4 h-4" />
+            </a>
+          </CardContent>
+        </Card>
+
         <AdDisplay placement="footer" className="mt-8" />
       </div>
 
