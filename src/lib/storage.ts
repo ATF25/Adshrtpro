@@ -1305,6 +1305,71 @@ export async function getEarningSetting(key: string): Promise<string | undefined
   return result[0]?.value || undefined;
 }
 
+// Atomically reward a referral: checks, credits both users, and marks referral rewarded
+export async function rewardReferral(referralId: string): Promise<Referral> {
+  const linksRequired = parseInt(await getEarningSetting("referralLinksRequired") || "3");
+
+  return await db.transaction(async (tx) => {
+    // Re-fetch referral under transaction
+    const rows = await tx.select().from(referrals).where(eq(referrals.id, referralId)).limit(1);
+    const referral = rows[0];
+    if (!referral) throw new Error("Referral not found");
+    if (referral.status === "rewarded") throw new Error("Referral already rewarded");
+
+    // Load users
+    const referrerRows = await tx.select().from(users).where(eq(users.id, referral.referrerId)).limit(1);
+    const referredRows = await tx.select().from(users).where(eq(users.id, referral.referredId)).limit(1);
+    const referrer = referrerRows[0];
+    const referred = referredRows[0];
+    if (!referrer || !referred) throw new Error("User not found");
+
+    if (!referrer.socialVerified) throw new Error("Referrer has not completed Social Verification");
+    if (!referred.socialVerified) throw new Error("Referred user has not completed Social Verification");
+
+    // Count referred user's links
+    const referredLinks = await tx.select().from(links).where(eq(links.userId, referral.referredId));
+    const actualLinkCount = referredLinks.length;
+    if (actualLinkCount < linksRequired) throw new Error(`Referred user has only created ${actualLinkCount} of ${linksRequired} required links`);
+
+    // Mark referral as rewarded (and snapshot linksCreated + validatedAt)
+    await tx.update(referrals).set(serializeDates({ status: "rewarded", linksCreated: actualLinkCount, validatedAt: new Date() })).where(eq(referrals.id, referralId));
+
+    // Ensure both users have balance rows
+    const referrerBalanceRows = await tx.select().from(userBalances).where(eq(userBalances.userId, referrer.id)).limit(1);
+    const referredBalanceRows = await tx.select().from(userBalances).where(eq(userBalances.userId, referred.id)).limit(1);
+    if (referrerBalanceRows.length === 0) {
+      await tx.insert(userBalances).values(serializeDates({ id: randomUUID(), userId: referrer.id, balanceUsd: "0", totalEarned: "0", totalWithdrawn: "0" }));
+    }
+    if (referredBalanceRows.length === 0) {
+      await tx.insert(userBalances).values(serializeDates({ id: randomUUID(), userId: referred.id, balanceUsd: "0", totalEarned: "0", totalWithdrawn: "0" }));
+    }
+
+    const rewardAmount = await getEarningSetting("referralReward") || "0.10";
+
+    // Update referrer balance
+    const refBal = (await tx.select().from(userBalances).where(eq(userBalances.userId, referrer.id)).limit(1))[0];
+    const newRefBalance = (parseFloat(refBal.balanceUsd || "0") + parseFloat(rewardAmount)).toFixed(6);
+    const newRefTotalEarned = (parseFloat(refBal.totalEarned || "0") + parseFloat(rewardAmount)).toFixed(6);
+    await tx.update(userBalances).set(serializeDates({ balanceUsd: newRefBalance, totalEarned: newRefTotalEarned, updatedAt: new Date() })).where(eq(userBalances.userId, referrer.id));
+
+    // Insert referrer transaction
+    await tx.insert(transactions).values(serializeDates({ id: randomUUID(), userId: referrer.id, type: "referral", amount: rewardAmount, description: `Referral reward for inviting user ${referred.email.split("@")[0]}***`, status: "completed", createdAt: new Date() }));
+
+    // Update referred balance
+    const referredBal = (await tx.select().from(userBalances).where(eq(userBalances.userId, referred.id)).limit(1))[0];
+    const newReferredBalance = (parseFloat(referredBal.balanceUsd || "0") + parseFloat(rewardAmount)).toFixed(6);
+    const newReferredTotalEarned = (parseFloat(referredBal.totalEarned || "0") + parseFloat(rewardAmount)).toFixed(6);
+    await tx.update(userBalances).set(serializeDates({ balanceUsd: newReferredBalance, totalEarned: newReferredTotalEarned, updatedAt: new Date() })).where(eq(userBalances.userId, referred.id));
+
+    // Insert referred transaction
+    await tx.insert(transactions).values(serializeDates({ id: randomUUID(), userId: referred.id, type: "referral", amount: rewardAmount, description: `Referral bonus for joining via ${referrer.email.split("@")[0]}***`, status: "completed", createdAt: new Date() }));
+
+    // Return updated referral
+    const updated = (await tx.select().from(referrals).where(eq(referrals.id, referralId)).limit(1))[0];
+    return updated;
+  });
+}
+
 export async function getAllEarningSettings(): Promise<Record<string, string>> {
   const allSettings = await db.select().from(earningSettings);
   const settingsObj: Record<string, string> = {};
@@ -1430,6 +1495,7 @@ export const storage = {
   getAllReferrals,
   createReferral,
   updateReferral,
+  rewardReferral,
   getSocialVerification,
   getAllSocialVerifications,
   createSocialVerification,

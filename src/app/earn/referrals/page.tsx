@@ -17,6 +17,7 @@ interface Referral {
   referredId: string;
   status: string;
   linksCreated: number;
+  referredLinksCount?: number;
   createdAt: string;
   validatedAt: string | null;
 }
@@ -28,6 +29,14 @@ interface ReferralData {
   linksRequired: number;
 }
 
+interface Transaction {
+  id: string;
+  type: string;
+  amount: string;
+  description: string | null;
+  createdAt: string;
+}
+
 export default function ReferralsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -35,6 +44,11 @@ export default function ReferralsPage() {
 
   const { data, isLoading } = useQuery<ReferralData>({
     queryKey: ["/api/referrals"],
+    enabled: !!user,
+  });
+
+  const { data: transactions = [], isLoading: transactionsLoading } = useQuery<Transaction[]>({
+    queryKey: ["/api/earning/transactions"],
     enabled: !!user,
   });
 
@@ -75,8 +89,10 @@ export default function ReferralsPage() {
   };
 
   const pendingCount = data?.referrals.filter(r => r.status === "pending").length || 0;
-  const creditedCount = data?.referrals.filter(r => r.status === "credited").length || 0;
-  const totalEarned = creditedCount * parseFloat(data?.reward || "0.10");
+  const referralEarned = transactions
+    .filter((tx) => tx.type === "referral" && parseFloat(tx.amount || "0") > 0)
+    .filter((tx) => tx.description?.startsWith("Referral reward for inviting user"))
+    .reduce((sum, tx) => sum + parseFloat(tx.amount || "0"), 0);
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -122,7 +138,7 @@ export default function ReferralsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600" data-testid="text-earned-referrals">
-              ${totalEarned.toFixed(6)}
+              ${isLoading || transactionsLoading ? "..." : referralEarned.toFixed(6)}
             </div>
           </CardContent>
         </Card>
@@ -225,7 +241,7 @@ export default function ReferralsPage() {
                     <p className="text-xs text-muted-foreground">
                       Joined: {new Date(referral.createdAt).toLocaleDateString()}
                       {" | "}
-                      Links: {referral.linksCreated}/{data.linksRequired}
+                      Links: {referral.referredLinksCount ?? referral.linksCreated}/{data.linksRequired}
                     </p>
                   </div>
                   {getStatusBadge(referral.status)}

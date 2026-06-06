@@ -10,10 +10,16 @@ export async function GET(req: Request) {
 
   const referrals = await storage.getReferralsByReferrer(user.id);
   const settings = await storage.getAllEarningSettings();
+  const enriched = await Promise.all(
+    referrals.map(async (referral) => ({
+      ...referral,
+      referredLinksCount: (await storage.getLinksByUserId(referral.referredId)).length,
+    }))
+  );
   
   return NextResponse.json({
     referralCode: user.referralCode,
-    referrals,
+    referrals: enriched,
     reward: settings.referralReward || "0.10",
     linksRequired: parseInt(settings.referralLinksRequired || "3"),
   });

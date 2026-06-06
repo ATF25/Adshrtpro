@@ -59,6 +59,20 @@ interface EnrichedSocialVerification extends SocialVerification {
   userEmail?: string;
 }
 
+interface EnrichedTaskSubmission extends TaskSubmission {
+  taskTitle?: string;
+  taskReward?: string;
+  userEmail?: string;
+}
+
+interface EnrichedReferral extends Referral {
+  referrerEmail?: string;
+  referredEmail?: string;
+  referrerSocialVerified?: boolean;
+  referredSocialVerified?: boolean;
+  referredLinksCount?: number;
+}
+
 export default function AdminEarningPage() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -74,14 +88,14 @@ export default function AdminEarningPage() {
     maxCompletions: "",
     isActive: true,
   });
-  const [submissionViewOpen, setSubmissionViewOpen] = useState<TaskSubmission | null>(null);
+  const [submissionViewOpen, setSubmissionViewOpen] = useState<EnrichedTaskSubmission | null>(null);
 
   const { data: tasks, isLoading: tasksLoading } = useQuery<Task[]>({
     queryKey: ["/api/admin/tasks"],
     enabled: !!user?.isAdmin,
   });
 
-  const { data: submissions, isLoading: submissionsLoading } = useQuery<TaskSubmission[]>({
+  const { data: submissions, isLoading: submissionsLoading } = useQuery<EnrichedTaskSubmission[]>({
     queryKey: ["/api/admin/task-submissions"],
     enabled: !!user?.isAdmin,
   });
@@ -91,7 +105,7 @@ export default function AdminEarningPage() {
     enabled: !!user?.isAdmin,
   });
 
-  const { data: referrals, isLoading: referralsLoading } = useQuery<Referral[]>({
+  const { data: referrals, isLoading: referralsLoading } = useQuery<EnrichedReferral[]>({
     queryKey: ["/api/admin/referrals"],
     enabled: !!user?.isAdmin,
   });
@@ -181,6 +195,9 @@ export default function AdminEarningPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/referrals"] });
       toast({ title: "Referral validated" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Validation failed", description: error?.message || "Unknown error", variant: "destructive" });
     },
   });
 
@@ -437,8 +454,10 @@ export default function AdminEarningPage() {
                     <TableBody>
                       {submissions.map((submission) => (
                         <TableRow key={submission.id}>
-                          <TableCell className="font-medium">{submission.taskId}</TableCell>
-                          <TableCell>{submission.userId}</TableCell>
+                          <TableCell className="font-medium">
+                            {submission.taskTitle || submission.taskId}
+                          </TableCell>
+                          <TableCell>{submission.userEmail || submission.userId}</TableCell>
                           <TableCell>
                             {submission.submittedAt
                               ? format(new Date(submission.submittedAt), "MMM d, yyyy HH:mm")
@@ -741,10 +760,10 @@ export default function AdminEarningPage() {
                     <TableBody>
                       {referrals.map((referral) => (
                         <TableRow key={referral.id}>
-                          <TableCell>{referral.referrerId}</TableCell>
-                          <TableCell>{referral.referredId}</TableCell>
+                          <TableCell>{referral.referrerEmail || referral.referrerId}</TableCell>
+                          <TableCell>{referral.referredEmail || referral.referredId}</TableCell>
                           <TableCell>
-                            {referral.linksCreated || 0} / {earningSettings?.referralLinksRequired || 3}
+                            {referral.referredLinksCount ?? referral.linksCreated ?? 0} / {earningSettings?.referralLinksRequired || 3}
                           </TableCell>
                           <TableCell>
                             <Badge
@@ -760,7 +779,7 @@ export default function AdminEarningPage() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right">
-                            {referral.status === "pending" && (referral.linksCreated || 0) >= parseInt(earningSettings?.referralLinksRequired || "3") && (
+                            {referral.status === "pending" && (referral.referredLinksCount ?? referral.linksCreated ?? 0) >= parseInt(earningSettings?.referralLinksRequired || "3") && (
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -771,8 +790,9 @@ export default function AdminEarningPage() {
                                   })
                                 }
                                 data-testid={`button-validate-referral-${referral.id}`}
+                                disabled={validateReferralMutation.isPending}
                               >
-                                Validate & Reward
+                                {validateReferralMutation.isPending ? "Validating..." : "Validate & Reward"}
                               </Button>
                             )}
                           </TableCell>
@@ -984,8 +1004,8 @@ export default function AdminEarningPage() {
             {submissionViewOpen && (
               <div className="space-y-4">
                 <div>
-                  <Label className="text-muted-foreground">User ID</Label>
-                  <p className="font-mono text-sm">{submissionViewOpen.userId}</p>
+                  <Label className="text-muted-foreground">User Email</Label>
+                  <p className="text-sm">{submissionViewOpen.userEmail || submissionViewOpen.userId}</p>
                 </div>
                 <div>
                   <Label className="text-muted-foreground">Profile/Post Link</Label>
