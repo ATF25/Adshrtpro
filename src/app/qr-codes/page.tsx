@@ -35,9 +35,10 @@ import {
   Clock,
 } from "lucide-react";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { AdDisplay } from "@/components/ad-display";
 import { SEO } from "@/components/seo";
+import { AdEmbed } from "@/components/ad-embed";
 import type { Link as LinkType } from "@shared/schema";
+import { ADSSTRA_728X90, HILLTOPADS_300X250 } from "@/lib/ad-snippets";
 
 interface AdSettings {
   adsEnabled: boolean;
@@ -239,6 +240,7 @@ function QrCodesContent() {
         title="QR Codes"
         description="Generate and customize QR codes for your shortened links. Download high-quality QR codes with custom colors."
       />
+      <AdEmbed html={ADSSTRA_728X90} className="mb-8" />
       <div className="max-w-4xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
@@ -313,6 +315,17 @@ function QrCodesContent() {
                 <div className="w-64 h-64 bg-white rounded-lg flex items-center justify-center mb-4 border">
                   <canvas ref={canvasRef} data-testid="qr-canvas" />
                 </div>
+
+                <a
+                  href="https://omg10.com/4/8770139"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mb-4 text-sm text-primary hover:underline inline-flex items-center gap-1"
+                  data-testid="link-qr-preview"
+                >
+                  Open QR preview link
+                  <ExternalLink className="w-3 h-3" />
+                </a>
                 
                 {!isUnlocked ? (
                   <div className="text-center">
@@ -437,7 +450,8 @@ function QrCodesContent() {
           </div>
         )}
 
-        <AdDisplay placement="footer" className="mt-8" />
+        <AdEmbed html={HILLTOPADS_300X250} className="mt-8" />
+
       </div>
 
       {/* Rewarded Ad Dialog */}

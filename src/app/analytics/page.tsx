@@ -37,11 +37,12 @@ import {
   Play,
   RefreshCw,
 } from "lucide-react";
-import { AdDisplay } from "@/components/ad-display";
 import { SEO } from "@/components/seo";
+import { AdEmbed } from "@/components/ad-embed";
 import type { Link as LinkType, LinkAnalytics } from "@shared/schema";
 import { format } from "date-fns";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { ZERADS_728X90, ADSSTRA_728X90, HILLTOPADS_300X250, ADS_BITCOIN_300X250 } from "@/lib/ad-snippets";
 
 interface UnlockStatus {
   unlocked: boolean;
@@ -329,6 +330,7 @@ function AnalyticsContent() {
         title="Analytics"
         description="Track clicks, countries, devices, and more with detailed link analytics."
       />
+      <AdEmbed html={ZERADS_728X90} className="mb-8" />
       <div className="max-w-6xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
@@ -429,6 +431,10 @@ function AnalyticsContent() {
                 {isUnlocking ? "Unlocking..." : "Watch Ad to Unlock (1 hour)"}
               </Button>
             </CardContent>
+
+            <div className="relative z-20 px-6 pb-8">
+              <AdEmbed html={HILLTOPADS_300X250} className="py-0" />
+            </div>
 
             <div className="absolute inset-0 z-0 blur-sm opacity-50 pointer-events-none p-6">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -607,6 +613,8 @@ function AnalyticsContent() {
           </>
         )}
 
+        <AdEmbed html={ADS_BITCOIN_300X250} className="mt-8" />
+
         <Card className="mt-8 border-dashed">
           <CardHeader>
             <CardTitle className="text-lg">Analysis Partner Link</CardTitle>
@@ -624,7 +632,8 @@ function AnalyticsContent() {
           </CardContent>
         </Card>
 
-        <AdDisplay placement="footer" className="mt-8" />
+        <AdEmbed html={ADSSTRA_728X90} className="mt-8" />
+
       </div>
 
       {/* Rewarded Ad Dialog */}

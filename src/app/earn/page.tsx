@@ -9,6 +9,8 @@ import Link from "next/link";
 import { DollarSign, Gift, Users, Wallet, ExternalLink, ClipboardList, ArrowUpRight } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { SEO } from "@/components/seo";
+import { AdEmbed } from "@/components/ad-embed";
+import { ADSSTRA_728X90, ADS_BITCOIN_300X250 } from "@/lib/ad-snippets";
 
 interface UserBalance {
   balanceUsd: string;
@@ -65,6 +67,7 @@ export default function EarnPage() {
         title="Earn Rewards"
         description="Complete offers, tasks, and refer friends to earn real money. Withdraw via cryptocurrency."
       />
+      <AdEmbed html={ADSSTRA_728X90} className="mb-8" />
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">Earn Rewards</h1>
         <p className="text-muted-foreground">Complete offers, tasks, and refer friends to earn USD.</p>
@@ -215,6 +218,8 @@ export default function EarnPage() {
           )}
         </CardContent>
       </Card>
+
+      <AdEmbed html={ADS_BITCOIN_300X250} className="mt-8" />
     </div>
   );
 }

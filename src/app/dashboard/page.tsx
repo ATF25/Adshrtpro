@@ -66,10 +66,11 @@ import {
 import type { Link as LinkType } from "@shared/schema";
 import { format } from "date-fns";
 import { SponsoredCarousel } from "@/components/sponsored-carousel";
-import { AdDisplay } from "@/components/ad-display";
+import { AdEmbed } from "@/components/ad-embed";
 import { SEO } from "@/components/seo";
 import { EmptyState } from "@/components/empty-state";
 import { Pagination, usePagination } from "@/components/pagination";
+import { ADSSTRA_728X90, AADS_728X90, ADS_BITCOIN_300X250 } from "@/lib/ad-snippets";
 
 const ITEMS_PER_PAGE = 10;
 
@@ -252,6 +253,7 @@ export default function DashboardPage() {
         title="Dashboard"
         description="Manage your shortened links, view analytics, and create new short URLs."
       />
+      <AdEmbed html={ADSSTRA_728X90} className="mb-8" />
       <div className="max-w-6xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
@@ -310,7 +312,7 @@ export default function DashboardPage() {
 
         <SponsoredCarousel />
 
-        <AdDisplay placement="header" className="mb-6" />
+        <AdEmbed html={ADS_BITCOIN_300X250} className="my-8" />
 
         <Card>
           <CardHeader className="flex flex-col sm:flex-row sm:items-center gap-4">
@@ -516,6 +518,8 @@ export default function DashboardPage() {
             )}
           </CardContent>
         </Card>
+
+        <AdEmbed html={AADS_728X90} className="mt-8" />
 
         <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
           <AlertDialogContent>

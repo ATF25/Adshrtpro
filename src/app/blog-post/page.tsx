@@ -7,7 +7,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AdDisplay } from "@/components/ad-display";
 import { BookOpen, Calendar, ArrowLeft, Clock } from "lucide-react";
 import type { BlogPost } from "@shared/schema";
 import { format } from "date-fns";
@@ -112,8 +111,6 @@ export default function BlogPostPage() {
           dangerouslySetInnerHTML={{ __html: post.content }}
           data-testid="post-content"
         />
-
-        <AdDisplay placement="in-content" className="my-8" />
 
         <div className="mt-12 pt-8 border-t">
           <Link href="/blog">

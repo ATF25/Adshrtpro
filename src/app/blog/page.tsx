@@ -5,12 +5,13 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AdDisplay } from "@/components/ad-display";
 import { SEO } from "@/components/seo";
 import { EmptyState } from "@/components/empty-state";
 import { BookOpen, Calendar, ArrowRight } from "lucide-react";
 import type { BlogPost } from "@shared/schema";
 import { format } from "date-fns";
+import { AdEmbed } from "@/components/ad-embed";
+import { ZERADS_728X90, ADS_BITCOIN_300X250 } from "@/lib/ad-snippets";
 
 export default function BlogPage() {
   const { data: posts, isLoading } = useQuery<BlogPost[]>({
@@ -39,7 +40,7 @@ export default function BlogPage() {
           </p>
         </div>
 
-        <AdDisplay placement="header" className="mb-8" />
+        <AdEmbed html={ZERADS_728X90} className="mb-8" />
 
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -107,7 +108,8 @@ export default function BlogPage() {
           </Card>
         )}
 
-        <AdDisplay placement="footer" className="mt-12" />
+        <AdEmbed html={ADS_BITCOIN_300X250} className="mt-12" />
+
       </div>
     </div>
   );

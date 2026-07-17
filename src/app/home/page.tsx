@@ -8,8 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AdDisplay } from "@/components/ad-display";
 import { SEO } from "@/components/seo";
+import { AdEmbed } from "@/components/ad-embed";
 import {
   Link2,
   BarChart3,
@@ -31,25 +31,11 @@ import {
   TrendingUp,
   Lock,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import type { Link as LinkType } from "@shared/schema";
 import { SiBitcoin, SiEthereum, SiDogecoin, SiLitecoin } from "react-icons/si";
-
-declare global {
-  interface Window {
-    aclib?: {
-      runBanner: (options: { zoneId: string }) => void;
-    };
-    atOptions?: {
-      key: string;
-      format: string;
-      height: number;
-      width: number;
-      params: Record<string, unknown>;
-    };
-  }
-}
+import { ADSSTRA_728X90, AADS_728X90, ZERADS_728X90, ADS_BITCOIN_300X250, HILLTOPADS_300X250 } from "@/lib/ad-snippets";
 
 interface PaymentProof {
   id: string;
@@ -109,10 +95,6 @@ export default function HomePage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const aclibLeaderboardRef = useRef<HTMLDivElement>(null);
-  const aclibMediumRef = useRef<HTMLDivElement>(null);
-  const highPerfBannerRef = useRef<HTMLDivElement>(null);
-  const untimelyBannerRef = useRef<HTMLDivElement>(null);
 
   const { data: recentLinks, isLoading } = useQuery<LinkType[]>({
     queryKey: ["/api/links"],
@@ -130,88 +112,6 @@ export default function HomePage() {
   });
 
   const totalPaidOut = parseFloat(publicStats?.totalPaidOut || "0");
-
-  useEffect(() => {
-    const injectAClibBanner = (container: HTMLDivElement, zoneId: string) => {
-      container.innerHTML = "";
-      const script = document.createElement("script");
-      script.type = "text/javascript";
-      script.text = `aclib.runBanner({ zoneId: '${zoneId}' });`;
-      container.appendChild(script);
-    };
-
-    const injectHighPerformanceBanner = (container: HTMLDivElement) => {
-      container.innerHTML = "";
-      window.atOptions = {
-        key: "0525861523c63e51a6085fa7ae6b8580",
-        format: "iframe",
-        height: 60,
-        width: 468,
-        params: {},
-      };
-
-      const invokeScript = document.createElement("script");
-      invokeScript.src = "https://www.highperformanceformat.com/0525861523c63e51a6085fa7ae6b8580/invoke.js";
-      invokeScript.async = true;
-      container.appendChild(invokeScript);
-    };
-
-    const injectUntimelyBanner = (container: HTMLDivElement) => {
-      container.innerHTML = "";
-      const script = document.createElement("script");
-      script.type = "text/javascript";
-      script.text = `(function(solyz){
-var d = document,
-    s = d.createElement('script'),
-    l = d.scripts[d.scripts.length - 1];
-s.settings = solyz || {};
-s.src = "//untimely-hello.com/bGXVVys.dHGald0JYnWRcc/-e/m/9pu-ZzUzlikXPmTMYZ5cN_DTco5BNSDFEytaNqjXk/0qNkzDk/0BNiQe";
-s.async = true;
-s.referrerPolicy = 'no-referrer-when-downgrade';
-l.parentNode.insertBefore(s, l);
-})({});`;
-      container.appendChild(script);
-    };
-
-    const renderAClibSlots = () => {
-      if (window.aclib && aclibLeaderboardRef.current) {
-        injectAClibBanner(aclibLeaderboardRef.current, "11180994");
-      }
-
-      if (window.aclib && aclibMediumRef.current) {
-        injectAClibBanner(aclibMediumRef.current, "11181038");
-      }
-    };
-
-    const existingAClibScript = document.querySelector<HTMLScriptElement>("script[data-aclib-loader='true']");
-
-    if (existingAClibScript) {
-      if (window.aclib) {
-        renderAClibSlots();
-      } else {
-        existingAClibScript.addEventListener("load", renderAClibSlots, {
-          once: true,
-        });
-      }
-    } else {
-      const aclibScript = document.createElement("script");
-      aclibScript.id = "aclib";
-      aclibScript.type = "text/javascript";
-      aclibScript.src = "https://acscdn.com/script/aclib.js";
-      aclibScript.async = true;
-      aclibScript.dataset.aclibLoader = "true";
-      aclibScript.addEventListener("load", renderAClibSlots, { once: true });
-      document.head.appendChild(aclibScript);
-    }
-
-    if (highPerfBannerRef.current) {
-      injectHighPerformanceBanner(highPerfBannerRef.current);
-    }
-
-    if (untimelyBannerRef.current) {
-      injectUntimelyBanner(untimelyBannerRef.current);
-    }
-  }, []);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -399,6 +299,8 @@ l.parentNode.insertBefore(s, l);
         </div>
       </section>
 
+      <AdEmbed html={ADSSTRA_728X90} className="py-2 mb-2" />
+
       {/* ── Trust Bar ── */}
       <section className="relative overflow-hidden py-14 px-4">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-primary/5 pointer-events-none" />
@@ -448,29 +350,6 @@ l.parentNode.insertBefore(s, l);
           </div>
         </div>
       </section>
-
-      <section className="px-4 pb-6">
-        <div className="max-w-7xl mx-auto space-y-6">
-          <div className="flex justify-center overflow-x-auto">
-            <div ref={aclibLeaderboardRef} className="min-h-[60px] min-w-[320px]" />
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-            <div className="flex justify-center overflow-x-auto">
-              <div ref={aclibMediumRef} className="min-h-[250px] min-w-[300px]" />
-            </div>
-            <div className="flex justify-center overflow-x-auto">
-              <div ref={highPerfBannerRef} className="min-h-[60px] min-w-[468px]" />
-            </div>
-          </div>
-
-          <div className="flex justify-center overflow-x-auto">
-            <div ref={untimelyBannerRef} className="min-h-[250px] min-w-[300px]" />
-          </div>
-        </div>
-      </section>
-
-      <AdDisplay placement="header" className="py-4 px-4" />
 
       {user && recentLinks && recentLinks.length > 0 && (
         <section className="py-12 px-4 bg-card border-y">
@@ -658,6 +537,10 @@ l.parentNode.insertBefore(s, l);
         </div>
       </section>
 
+      <AdEmbed html={ADS_BITCOIN_300X250} className="py-2 mb-2" />
+
+      <AdEmbed html={HILLTOPADS_300X250} className="py-2 mb-2" />
+
       {/* ── Testimonials ── */}
       <section className="py-16 md:py-24 px-4">
         <div className="max-w-6xl mx-auto">
@@ -708,7 +591,7 @@ l.parentNode.insertBefore(s, l);
         </div>
       </section>
 
-      <AdDisplay placement="footer" className="py-6 px-4" />
+      <AdEmbed html={AADS_728X90} className="py-2 mb-2" />
 
       {paymentProofs.length > 0 && (
         <section className="py-12 px-4 bg-card border-y">
@@ -818,6 +701,8 @@ l.parentNode.insertBefore(s, l);
           </div>
         </div>
       </section>
+
+      <AdEmbed html={ZERADS_728X90} className="py-2 mb-2" />
     </div>
   );
 }
