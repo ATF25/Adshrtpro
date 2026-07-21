@@ -77,6 +77,9 @@ function AnalyticsContent() {
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [forceLockedLinks, setForceLockedLinks] = useState<Set<string>>(new Set());
   const [adDialogOpen, setAdDialogOpen] = useState(false);
+  const [adDialogPhase, setAdDialogPhase] = useState<"idle" | "ad">("idle");
+  const [adStarted, setAdStarted] = useState(false);
+  const [adCountdown, setAdCountdown] = useState(15);
   const adContainerRef = useRef<HTMLDivElement>(null);
 
   const { data: links, isLoading: linksLoading } = useQuery<LinkType[]>({
@@ -220,6 +223,27 @@ function AnalyticsContent() {
     }
   }, [adDialogOpen, adSettings?.rewardedAdCode]);
 
+  useEffect(() => {
+    if (!adDialogOpen || adDialogPhase !== "ad" || adStarted || !adSettings?.rewardedAdCode) {
+      return;
+    }
+
+    setAdStarted(true);
+    setAdCountdown(15);
+
+    const countdownInterval = window.setInterval(() => {
+      setAdCountdown((prev) => {
+        if (prev <= 1) {
+          window.clearInterval(countdownInterval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => window.clearInterval(countdownInterval);
+  }, [adDialogOpen, adDialogPhase, adStarted, adSettings?.rewardedAdCode]);
+
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -236,32 +260,36 @@ function AnalyticsContent() {
 
   const handleWatchAd = () => {
     if (!selectedLinkId) return;
-    // If there's a rewarded ad code, show the dialog first
     if (adSettings?.rewardedAdCode) {
       setAdDialogOpen(true);
+      setAdDialogPhase("idle");
+      setAdStarted(false);
+      setAdCountdown(15);
     } else {
-      // No ad code set, unlock directly
       handleUnlock();
     }
+  };
+
+  const handleAdContinue = () => {
+    setAdDialogPhase("ad");
+    setAdStarted(false);
+    setAdCountdown(15);
   };
 
   const handleUnlock = async () => {
     if (!selectedLinkId) return;
     setIsUnlocking(true);
-    setAdDialogOpen(false);
     try {
       await unlockLinkAnalytics(selectedLinkId);
-      // Clear force lock flag for this link after successful unlock
-      setForceLockedLinks(prev => {
+      setForceLockedLinks((prev) => {
         const next = new Set(prev);
         next.delete(selectedLinkId);
         return next;
       });
-      // Invalidate and refetch unlock status to sync with server
       await queryClient.invalidateQueries({ queryKey: [`/api/analytics/${selectedLinkId}/unlock-status`] });
       await refetchUnlockStatus();
-      // Invalidate analytics query to fetch data immediately
       queryClient.invalidateQueries({ queryKey: ["/api/analytics", selectedLinkId] });
+      setAdDialogOpen(false);
     } catch (error) {
       console.error("Failed to unlock analytics:", error);
     } finally {
@@ -645,23 +673,56 @@ function AnalyticsContent() {
               Watch the ad below to unlock analytics for 1 hour.
             </DialogDescription>
           </DialogHeader>
-          <div 
-            ref={adContainerRef} 
-            className="min-h-[200px] flex items-center justify-center bg-muted rounded-md"
-            data-testid="ad-container"
-          >
-            {!adSettings?.rewardedAdCode && (
-              <p className="text-muted-foreground">Loading ad...</p>
-            )}
-          </div>
-          <div className="flex justify-end gap-2 mt-4">
-            <Button variant="outline" onClick={() => setAdDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleUnlock} disabled={isUnlocking}>
-              {isUnlocking ? "Unlocking..." : "Continue & Unlock"}
-            </Button>
-          </div>
+
+          {adDialogPhase === "idle" ? (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                You must watch a short ad before analytics are unlocked. Press Continue & Unlock to start.
+              </p>
+              <div className="flex justify-end gap-2 mt-4">
+                <Button variant="outline" onClick={() => setAdDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleAdContinue}>
+                  Continue & Unlock
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div 
+                ref={adContainerRef} 
+                className="min-h-[200px] flex items-center justify-center bg-muted rounded-md"
+                data-testid="ad-container"
+              >
+                {!adSettings?.rewardedAdCode ? (
+                  <p className="text-muted-foreground">Loading ad...</p>
+                ) : (
+                  <div className="text-center">
+                    <div className="text-sm text-muted-foreground mb-2">
+                      Your ad is appearing below. Please wait {adCountdown}s.
+                    </div>
+                    {adCountdown === 0 && (
+                      <div className="text-sm text-primary font-semibold">
+                        Ad complete. Press Continue & Unlock to proceed.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="flex justify-end gap-2 mt-4">
+                <Button variant="outline" onClick={() => setAdDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleUnlock}
+                  disabled={isUnlocking || adCountdown > 0}
+                >
+                  {isUnlocking ? "Unlocking..." : "Continue & Unlock"}
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
