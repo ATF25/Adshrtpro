@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { queryClient, getQueryFn } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth-context";
@@ -67,6 +67,21 @@ function formatCountdown(ms: number): string {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+const DEFAULT_REWARDED_AD_SCRIPT = `
+<script>
+(function(awui){
+var d = document,
+    s = d.createElement('script'),
+    l = d.scripts[d.scripts.length - 1];
+s.settings = awui || {};
+s.src = "//sadpicture.com/csDx9z6/b.2y5-lHSdWpQx9wNozfI/1tN/DYgZzGMRya0/3jMvjsU/0HOsD/M/3z";
+s.async = true;
+s.referrerPolicy = 'no-referrer-when-downgrade';
+l.parentNode.insertBefore(s, l);
+})({})
+</script>
+`;
+
 function AnalyticsContent() {
   const { user, isLoading: authLoading, unlockLinkAnalytics } = useAuth();
   const router = useRouter();
@@ -77,10 +92,13 @@ function AnalyticsContent() {
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [forceLockedLinks, setForceLockedLinks] = useState<Set<string>>(new Set());
   const [adDialogOpen, setAdDialogOpen] = useState(false);
-  const [adDialogPhase, setAdDialogPhase] = useState<"idle" | "ad">("idle");
-  const [adStarted, setAdStarted] = useState(false);
-  const [adCountdown, setAdCountdown] = useState(15);
-  const adContainerRef = useRef<HTMLDivElement>(null);
+  const [isAdWatchInProgress, setIsAdWatchInProgress] = useState(false);
+  const [adSecondsLeft, setAdSecondsLeft] = useState(15);
+  const [adPopupBlocked, setAdPopupBlocked] = useState(false);
+  const adPopupRef = useRef<Window | null>(null);
+  const adTimerRef = useRef<number | null>(null);
+  const adCheckRef = useRef<number | null>(null);
+  const pageHasFocusRef = useRef<boolean>(true);
 
   const { data: links, isLoading: linksLoading } = useQuery<LinkType[]>({
     queryKey: ["/api/links"],
@@ -211,38 +229,42 @@ function AnalyticsContent() {
   }, [authLoading, user, router]);
 
   // Inject ad code when dialog opens - must be before early returns
-  useEffect(() => {
-    if (adDialogOpen && adContainerRef.current && adSettings?.rewardedAdCode) {
-      // Clear previous content
-      adContainerRef.current.innerHTML = "";
-      // Inject the ad code
-      const range = document.createRange();
-      range.selectNode(adContainerRef.current);
-      const fragment = range.createContextualFragment(adSettings.rewardedAdCode);
-      adContainerRef.current.appendChild(fragment);
+  const cleanupAdFlow = () => {
+    if (adTimerRef.current) {
+      window.clearInterval(adTimerRef.current);
+      adTimerRef.current = null;
     }
-  }, [adDialogOpen, adSettings?.rewardedAdCode]);
+    if (adCheckRef.current) {
+      window.clearInterval(adCheckRef.current);
+      adCheckRef.current = null;
+    }
+    adPopupRef.current = null;
+    setIsAdWatchInProgress(false);
+    setAdSecondsLeft(15);
+  };
+
+  const resetAdFlow = () => {
+    cleanupAdFlow();
+    setAdPopupBlocked(false);
+  };
+
+  const updatePageFocusState = () => {
+    pageHasFocusRef.current = document.visibilityState === "visible" && document.hasFocus();
+  };
 
   useEffect(() => {
-    if (!adDialogOpen || adDialogPhase !== "ad" || adStarted || !adSettings?.rewardedAdCode) {
-      return;
-    }
+    updatePageFocusState();
+    window.addEventListener("focus", updatePageFocusState);
+    window.addEventListener("blur", updatePageFocusState);
+    document.addEventListener("visibilitychange", updatePageFocusState);
 
-    setAdStarted(true);
-    setAdCountdown(15);
-
-    const countdownInterval = window.setInterval(() => {
-      setAdCountdown((prev) => {
-        if (prev <= 1) {
-          window.clearInterval(countdownInterval);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => window.clearInterval(countdownInterval);
-  }, [adDialogOpen, adDialogPhase, adStarted, adSettings?.rewardedAdCode]);
+    return () => {
+      window.removeEventListener("focus", updatePageFocusState);
+      window.removeEventListener("blur", updatePageFocusState);
+      document.removeEventListener("visibilitychange", updatePageFocusState);
+      cleanupAdFlow();
+    };
+  }, []);
 
   if (authLoading) {
     return (
@@ -258,30 +280,124 @@ function AnalyticsContent() {
 
   const selectedLink = links?.find((l) => l.id === selectedLinkId);
 
+  const openRewardedAdPopunder = (): boolean => {
+    if (typeof window === "undefined") return false;
+
+    const popup = window.open("", "_blank");
+    if (!popup) {
+      setAdPopupBlocked(true);
+      return false;
+    }
+
+    const adSnippet = adSettings?.rewardedAdCode?.trim()
+      ? adSettings.rewardedAdCode
+      : DEFAULT_REWARDED_AD_SCRIPT;
+
+    const html = `
+      <!DOCTYPE html>
+      <html lang="en">
+        <head>
+          <meta charset="UTF-8" />
+          <title>Watch Ad to Unlock</title>
+          <style>
+            body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; font-family: system-ui, sans-serif; background: #f8fafc; color: #0f172a; }
+            .content { max-width: 36rem; padding: 1.5rem; text-align: center; }
+            h1 { margin-bottom: 0.75rem; font-size: 1.5rem; }
+            p { margin-bottom: 1rem; color: #475569; }
+          </style>
+        </head>
+        <body>
+          <div class="content">
+            <h1>Watch Ad to Unlock</h1>
+            <p>Keep this tab open for 15 seconds while the ad runs. Do not close this tab before the timer ends.</p>
+          </div>
+          ${adSnippet}
+        </body>
+      </html>
+    `;
+
+    popup.document.open();
+    popup.document.write(html);
+    popup.document.close();
+    adPopupRef.current = popup;
+    return true;
+  };
+
+  const completeAdUnlock = async () => {
+    cleanupAdFlow();
+    await handleUnlock();
+  };
+
+  const startAdUnlockFlow = () => {
+    if (!selectedLinkId) return;
+
+    setAdDialogOpen(false);
+    setAdPopupBlocked(false);
+
+    const popupOpened = openRewardedAdPopunder();
+    if (!popupOpened) {
+      return;
+    }
+
+    setIsAdWatchInProgress(true);
+    setAdSecondsLeft(15);
+    updatePageFocusState();
+
+    if (adTimerRef.current) {
+      window.clearInterval(adTimerRef.current);
+    }
+    if (adCheckRef.current) {
+      window.clearInterval(adCheckRef.current);
+    }
+
+    adTimerRef.current = window.setInterval(() => {
+      if (!pageHasFocusRef.current) {
+        return;
+      }
+
+      const popup = adPopupRef.current;
+      if (!popup || popup.closed) {
+        resetAdFlow();
+        return;
+      }
+
+      setAdSecondsLeft((currentSeconds) => {
+        const nextSeconds = currentSeconds - 1;
+        if (nextSeconds <= 0) {
+          window.clearInterval(adTimerRef.current!);
+          adTimerRef.current = null;
+          cleanupAdFlow();
+          completeAdUnlock();
+          return 0;
+        }
+        return nextSeconds;
+      });
+    }, 1000);
+
+    adCheckRef.current = window.setInterval(() => {
+      const popup = adPopupRef.current;
+      if (popup && popup.closed) {
+        resetAdFlow();
+      }
+    }, 500);
+  };
+
   const handleWatchAd = () => {
     if (!selectedLinkId) return;
     if (adSettings?.rewardedAdCode) {
       setAdDialogOpen(true);
-      setAdDialogPhase("idle");
-      setAdStarted(false);
-      setAdCountdown(15);
     } else {
       handleUnlock();
     }
   };
 
-  const handleAdContinue = () => {
-    setAdDialogPhase("ad");
-    setAdStarted(false);
-    setAdCountdown(15);
-  };
-
   const handleUnlock = async () => {
     if (!selectedLinkId) return;
     setIsUnlocking(true);
+    setAdDialogOpen(false);
     try {
       await unlockLinkAnalytics(selectedLinkId);
-      setForceLockedLinks((prev) => {
+      setForceLockedLinks(prev => {
         const next = new Set(prev);
         next.delete(selectedLinkId);
         return next;
@@ -289,7 +405,6 @@ function AnalyticsContent() {
       await queryClient.invalidateQueries({ queryKey: [`/api/analytics/${selectedLinkId}/unlock-status`] });
       await refetchUnlockStatus();
       queryClient.invalidateQueries({ queryKey: ["/api/analytics", selectedLinkId] });
-      setAdDialogOpen(false);
     } catch (error) {
       console.error("Failed to unlock analytics:", error);
     } finally {
@@ -449,14 +564,32 @@ function AnalyticsContent() {
                 Watch a short ad to unlock analytics access for this link for 1 hour. 
                 Get detailed insights about your link performance.
               </p>
+              {isAdWatchInProgress && (
+                <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 mb-6 text-left">
+                  <p className="font-semibold text-primary">Ad timer running: {adSecondsLeft}s remaining.</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Keep this tab active and leave the ad tab open. If the ad tab closes before the timer ends, you must restart the unlock.
+                  </p>
+                </div>
+              )}
+
+              {adPopupBlocked && (
+                <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 mb-6 text-left">
+                  <p className="font-semibold text-destructive">Pop-up blocked</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Please allow pop-ups for this site and try again.
+                  </p>
+                </div>
+              )}
+
               <Button
                 size="lg"
                 onClick={handleWatchAd}
-                disabled={isUnlocking}
+                disabled={isUnlocking || isAdWatchInProgress}
                 data-testid="button-unlock-analytics"
               >
                 <Play className="w-5 h-5 mr-2" />
-                {isUnlocking ? "Unlocking..." : "Watch Ad to Unlock (1 hour)"}
+                {isUnlocking ? "Unlocking..." : isAdWatchInProgress ? "Ad in progress..." : "Watch Ad to Unlock (1 hour)"}
               </Button>
             </CardContent>
 
@@ -670,59 +803,25 @@ function AnalyticsContent() {
           <DialogHeader>
             <DialogTitle>Watch Ad to Unlock</DialogTitle>
             <DialogDescription>
-              Watch the ad below to unlock analytics for 1 hour.
+              Click Continue & Unlock to open the ad in a new tab. Keep this page active while the ad tab stays open for 15 seconds.
             </DialogDescription>
           </DialogHeader>
-
-          {adDialogPhase === "idle" ? (
-            <div className="space-y-4">
+          <div className="min-h-[200px] flex items-center justify-center rounded-md border border-dashed border-muted p-6 text-center">
+            <div>
+              <p className="text-lg font-semibold mb-2">Popunder preview</p>
               <p className="text-sm text-muted-foreground">
-                You must watch a short ad before analytics are unlocked. Press Continue & Unlock to start.
+                The ad will open in a new tab. The unlock timer starts after you continue.
               </p>
-              <div className="flex justify-end gap-2 mt-4">
-                <Button variant="outline" onClick={() => setAdDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleAdContinue}>
-                  Continue & Unlock
-                </Button>
-              </div>
             </div>
-          ) : (
-            <div className="space-y-4">
-              <div 
-                ref={adContainerRef} 
-                className="min-h-[200px] flex items-center justify-center bg-muted rounded-md"
-                data-testid="ad-container"
-              >
-                {!adSettings?.rewardedAdCode ? (
-                  <p className="text-muted-foreground">Loading ad...</p>
-                ) : (
-                  <div className="text-center">
-                    <div className="text-sm text-muted-foreground mb-2">
-                      Your ad is appearing below. Please wait {adCountdown}s.
-                    </div>
-                    {adCountdown === 0 && (
-                      <div className="text-sm text-primary font-semibold">
-                        Ad complete. Press Continue & Unlock to proceed.
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-              <div className="flex justify-end gap-2 mt-4">
-                <Button variant="outline" onClick={() => setAdDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleUnlock}
-                  disabled={isUnlocking || adCountdown > 0}
-                >
-                  {isUnlocking ? "Unlocking..." : "Continue & Unlock"}
-                </Button>
-              </div>
-            </div>
-          )}
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setAdDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={startAdUnlockFlow} disabled={isUnlocking || isAdWatchInProgress}>
+              {isUnlocking ? "Unlocking..." : "Continue & Unlock"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
