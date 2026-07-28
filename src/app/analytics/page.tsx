@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { queryClient, getQueryFn } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth-context";
@@ -54,6 +54,9 @@ interface AdSettings {
   rewardedAdCode: string;
 }
 
+const DIRECT_ANALYTICS_UNLOCK_URL = "https://elementarywhole.com/b.3NV/0/PM3UpVvEbWmqV/JLZtDG0p3CM/jEUk0DOZDKMYzEL/TTcWy-N_TUQD4dMkzVcI";
+const UNLOCK_POPUNDER_SECONDS = 15;
+
 function formatCountdown(ms: number): string {
   if (ms <= 0) return "00:00";
   const totalSeconds = Math.floor(ms / 1000);
@@ -74,14 +77,16 @@ function AnalyticsContent() {
   const linkParam = searchParams.get("link");
   const [selectedLinkId, setSelectedLinkId] = useState<string | null>(linkParam);
   const [countdown, setCountdown] = useState<string>("00:00");
+  const [unlockCountdownSeconds, setUnlockCountdownSeconds] = useState<number>(0);
+  const [unlockMessage, setUnlockMessage] = useState<string | null>(null);
+  const [localUnlockExpiry, setLocalUnlockExpiry] = useState<Date | null>(null);
   const [isUnlocking, setIsUnlocking] = useState(false);
-  const [unlockCountdownMs, setUnlockCountdownMs] = useState<number>(0);
-  const popunderWindowRef = useRef<Window | null>(null);
-  const popunderIntervalRef = useRef<number | null>(null);
   const [forceLockedLinks, setForceLockedLinks] = useState<Set<string>>(new Set());
   const [adDialogOpen, setAdDialogOpen] = useState(false);
   const adContainerRef = useRef<HTMLDivElement>(null);
-  const [clientUnlockExpiry, setClientUnlockExpiry] = useState<number | null>(null);
+  const unlockTimerRef = useRef<number | null>(null);
+  const popunderWindowRef = useRef<Window | null>(null);
+  const unlockStartTimeRef = useRef<number | null>(null);
 
   const { data: links, isLoading: linksLoading } = useQuery<LinkType[]>({
     queryKey: ["/api/links"],
@@ -106,18 +111,19 @@ function AnalyticsContent() {
   const serverExpiry = unlockStatus?.expiry ? new Date(unlockStatus.expiry) : null;
   const expiryValid = serverExpiry && serverExpiry.getTime() > Date.now();
   const serverUnlocked = unlockStatus?.unlocked && expiryValid;
+  const localExpiryValid = localUnlockExpiry && localUnlockExpiry.getTime() > Date.now();
+  const effectiveExpiry = serverExpiry ?? localUnlockExpiry;
   const isLinkForceLocked = selectedLinkId ? forceLockedLinks.has(selectedLinkId) : false;
   // Real-time check: even with stale cache, compare expiry NOW
-  const clientUnlocked = clientUnlockExpiry ? clientUnlockExpiry > Date.now() : false;
-  const isUnlocked = (Boolean(serverUnlocked) || clientUnlocked) && !isLinkForceLocked;
+  const isUnlocked = Boolean((serverUnlocked || localExpiryValid)) && !isLinkForceLocked;
 
-  // Precise timeout to lock exactly at server expiry time
+  // Precise timeout to lock exactly at server or local expiry time
   useEffect(() => {
-    if (!selectedLinkId || !unlockStatus?.expiry) {
+    if (!selectedLinkId || !effectiveExpiry) {
       return;
     }
 
-    const expiryDate = new Date(unlockStatus.expiry);
+    const expiryDate = effectiveExpiry;
     const remaining = expiryDate.getTime() - Date.now();
     
     const lockLink = () => {
@@ -147,15 +153,14 @@ function AnalyticsContent() {
 
   // Countdown timer - updates every second for display only
   useEffect(() => {
-    // Prefer client-side sessionStorage expiry when present, otherwise fall back to server expiry
-    const rawExpiry = clientUnlockExpiry ? new Date(clientUnlockExpiry) : (unlockStatus?.expiry ? new Date(unlockStatus.expiry) : null);
-    if (!selectedLinkId || !rawExpiry) {
+    if (!selectedLinkId || !effectiveExpiry) {
       setCountdown("00:00");
       return;
     }
 
     const updateCountdown = () => {
-      const remaining = rawExpiry.getTime() - Date.now();
+      const expiryDate = effectiveExpiry;
+      const remaining = expiryDate.getTime() - Date.now();
       if (remaining > 0) {
         setCountdown(formatCountdown(remaining));
       } else {
@@ -166,7 +171,7 @@ function AnalyticsContent() {
     updateCountdown();
     const interval = setInterval(updateCountdown, 1000);
     return () => clearInterval(interval);
-  }, [selectedLinkId, unlockStatus?.expiry, clientUnlockExpiry]);
+  }, [selectedLinkId, effectiveExpiry]);
 
   // Query for analytics data - only when unlocked
   const analyticsEnabled = Boolean(selectedLinkId) && isUnlocked;
@@ -207,45 +212,11 @@ function AnalyticsContent() {
     }
   }, [links, selectedLinkId]);
 
-  // Read client-side sessionStorage unlock expiry for the selected link
-  useEffect(() => {
-    if (!selectedLinkId) {
-      setClientUnlockExpiry(null);
-      return;
-    }
-    try {
-      const raw = sessionStorage.getItem(`analytics_unlock_${selectedLinkId}`);
-      if (raw) {
-        const ts = parseInt(raw, 10);
-        if (!isNaN(ts) && ts > Date.now()) {
-          setClientUnlockExpiry(ts);
-        } else {
-          try { sessionStorage.removeItem(`analytics_unlock_${selectedLinkId}`); } catch {}
-          setClientUnlockExpiry(null);
-        }
-      } else {
-        setClientUnlockExpiry(null);
-      }
-    } catch (e) {
-      setClientUnlockExpiry(null);
-    }
-  }, [selectedLinkId]);
-
   useEffect(() => {
     if (!authLoading && !user) {
       router.push("/login");
     }
   }, [authLoading, user, router]);
-
-  // Cleanup popunder interval on unmount
-  useEffect(() => {
-    return () => {
-      if (popunderIntervalRef.current) {
-        clearInterval(popunderIntervalRef.current);
-        popunderIntervalRef.current = null;
-      }
-    };
-  }, []);
 
   // Inject ad code when dialog opens - must be before early returns
   useEffect(() => {
@@ -259,6 +230,126 @@ function AnalyticsContent() {
       adContainerRef.current.appendChild(fragment);
     }
   }, [adDialogOpen, adSettings?.rewardedAdCode]);
+
+  const clearUnlockTimer = () => {
+    if (unlockTimerRef.current) {
+      window.clearInterval(unlockTimerRef.current);
+      unlockTimerRef.current = null;
+    }
+    unlockStartTimeRef.current = null;
+  };
+
+  const resetUnlockAttempt = (message: string) => {
+    clearUnlockTimer();
+    if (popunderWindowRef.current && !popunderWindowRef.current.closed) {
+      popunderWindowRef.current.close();
+    }
+    popunderWindowRef.current = null;
+    setUnlockCountdownSeconds(0);
+    setUnlockMessage(message);
+    setIsUnlocking(false);
+  };
+
+  const finalizeUnlock = async () => {
+    if (!selectedLinkId) return;
+    setUnlockMessage("Unlocking analytics. Please wait...");
+    try {
+      await unlockLinkAnalytics(selectedLinkId);
+      sessionStorage.setItem(`analytics-unlocked-${selectedLinkId}`, new Date(Date.now() + 60 * 60 * 1000).toISOString());
+      setForceLockedLinks(prev => {
+        const next = new Set(prev);
+        next.delete(selectedLinkId);
+        return next;
+      });
+      await queryClient.invalidateQueries({ queryKey: [`/api/analytics/${selectedLinkId}/unlock-status`] });
+      await refetchUnlockStatus();
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics", selectedLinkId] });
+      setUnlockMessage("Analytics unlocked for 1 hour.");
+    } catch (error) {
+      console.error("Failed to unlock analytics:", error);
+      resetUnlockAttempt("Unable to unlock analytics. Please try again.");
+    } finally {
+      setIsUnlocking(false);
+    }
+  };
+
+  const startUnlockAttempt = () => {
+    if (!selectedLinkId) return;
+    setUnlockMessage("Keep the popunder open for 15 seconds to unlock analytics.");
+    setUnlockCountdownSeconds(UNLOCK_POPUNDER_SECONDS);
+    setIsUnlocking(true);
+    unlockStartTimeRef.current = Date.now();
+
+    const popunder = window.open(DIRECT_ANALYTICS_UNLOCK_URL, "_blank");
+    popunderWindowRef.current = popunder;
+
+    if (!popunder) {
+      resetUnlockAttempt("Popup blocked. Allow popups and try again.");
+      return;
+    }
+
+    unlockTimerRef.current = window.setInterval(() => {
+      setUnlockCountdownSeconds((current) => {
+        if (current <= 1) {
+          clearUnlockTimer();
+          if (popunderWindowRef.current && !popunderWindowRef.current.closed) {
+            finalizeUnlock();
+          } else {
+            resetUnlockAttempt("You closed the popunder too early. Try again.");
+          }
+          return 0;
+        }
+        return current - 1;
+      });
+    }, 1000);
+  };
+
+  useEffect(() => {
+    if (!selectedLinkId) return;
+
+    const checkReturnEarly = () => {
+      if (unlockStartTimeRef.current && unlockCountdownSeconds > 0) {
+        const elapsed = Math.floor((Date.now() - unlockStartTimeRef.current) / 1000);
+        if (elapsed < UNLOCK_POPUNDER_SECONDS) {
+          resetUnlockAttempt("You returned too early. Please keep the popunder open for the full 15 seconds.");
+        }
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        checkReturnEarly();
+      }
+    };
+
+    const onFocus = () => {
+      checkReturnEarly();
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [selectedLinkId, unlockCountdownSeconds]);
+
+  useEffect(() => {
+    if (!selectedLinkId) return;
+    const item = sessionStorage.getItem(`analytics-unlocked-${selectedLinkId}`);
+    if (item) {
+      const expiry = new Date(item);
+      if (expiry.getTime() > Date.now()) {
+        setLocalUnlockExpiry(expiry);
+      } else {
+        sessionStorage.removeItem(`analytics-unlocked-${selectedLinkId}`);
+        setLocalUnlockExpiry(null);
+      }
+    } else {
+      setLocalUnlockExpiry(null);
+    }
+  }, [selectedLinkId]);
 
   if (authLoading) {
     return (
@@ -276,87 +367,17 @@ function AnalyticsContent() {
 
   const handleWatchAd = () => {
     if (!selectedLinkId) return;
-    // Start popunder + 15s countdown flow (must be initiated by direct click)
-    startPopunderCountdown();
+    if (adSettings?.rewardedAdCode) {
+      setAdDialogOpen(true);
+      setUnlockMessage(null);
+    } else {
+      startUnlockAttempt();
+    }
   };
 
-  // Popunder HTML snippet (HilltopAds) - zone #7254833 flow
-  const POPUNDER_HTML = `<!doctype html><html><head><meta name="referrer" content="no-referrer-when-downgrade"></head><body><script>(function(awui){var d = document, s = d.createElement('script'), l = d.scripts[d.scripts.length - 1]; s.settings = awui || {}; s.src = "//sadpicture.com/csDx9z6/b.2y5-lHSdWpQx9wNozfI/1tN/DYgZzGMRya0/3jMvjsU/0HOsD/M/3z"; s.async = true; s.referrerPolicy = 'no-referrer-when-downgrade'; l.parentNode.insertBefore(s, l); })({})</script></body></html>`;
-
-  const startPopunderCountdown = async () => {
-    if (!selectedLinkId) return;
-    // open a new tab immediately on user click to avoid popup blockers
-    const popup = window.open("", "_blank");
-    if (!popup) {
-      // Popup blocked
-      alert("Unable to open the ad window. Please allow popups for this site and try again.");
-      return;
-    }
-
-    popunderWindowRef.current = popup;
-    try {
-      popup.document.open();
-      popup.document.write(POPUNDER_HTML);
-      popup.document.close();
-    } catch (e) {
-      // Some browsers prevent writing to the new window; still keep it open
-    }
-
-    setIsUnlocking(true);
-    const START = Date.now();
-    const DURATION = 15_000; // 15 seconds
-    setUnlockCountdownMs(DURATION);
-
-    // Poll every 250ms to update countdown and detect if popup was closed early
-    popunderIntervalRef.current = window.setInterval(async () => {
-      const elapsed = Date.now() - START;
-      const remaining = Math.max(0, DURATION - elapsed);
-      setUnlockCountdownMs(remaining);
-
-      // If popup closed before duration, reset
-      if (popup.closed) {
-        if (elapsed < DURATION) {
-          // Failed: user closed popunder early
-          clearInterval(popunderIntervalRef.current!);
-          popunderIntervalRef.current = null;
-          popunderWindowRef.current = null;
-          setIsUnlocking(false);
-          setUnlockCountdownMs(0);
-          alert("You closed the ad too early. Please try again and keep the ad tab open for 15 seconds.");
-        }
-      }
-
-      if (elapsed >= DURATION) {
-        // Success: popunder remained open for the required duration
-        clearInterval(popunderIntervalRef.current!);
-        popunderIntervalRef.current = null;
-        popunderWindowRef.current = popup; // leave popup open
-        setUnlockCountdownMs(0);
-        try {
-          // Persist unlock server-side
-          await unlockLinkAnalytics(selectedLinkId);
-        } catch (err) {
-          console.error("Failed to persist unlock on server:", err);
-        }
-
-        // Persist client-side for 1 hour
-        const expiry = Date.now() + 60 * 60 * 1000;
-        try {
-          sessionStorage.setItem(`analytics_unlock_${selectedLinkId}`, String(expiry));
-        } catch {}
-
-        // Update UI / queries
-        setForceLockedLinks(prev => {
-          const next = new Set(prev);
-          next.delete(selectedLinkId);
-          return next;
-        });
-        await queryClient.invalidateQueries({ queryKey: [`/api/analytics/${selectedLinkId}/unlock-status`] });
-        await refetchUnlockStatus();
-        queryClient.invalidateQueries({ queryKey: ["/api/analytics", selectedLinkId] });
-        setIsUnlocking(false);
-      }
-    }, 250);
+  const handleUnlock = () => {
+    setAdDialogOpen(false);
+    startUnlockAttempt();
   };
 
   const StatCard = ({
@@ -413,38 +434,6 @@ function AnalyticsContent() {
       </CardContent>
     </Card>
   );
-
-  async function handleUnlock(): Promise<void> {
-    if (!selectedLinkId) return;
-    setIsUnlocking(true);
-    setAdDialogOpen(false);
-    try {
-      await unlockLinkAnalytics(selectedLinkId);
-
-      // Clear force lock flag for this link after successful unlock
-      setForceLockedLinks(prev => {
-        const next = new Set(prev);
-        next.delete(selectedLinkId);
-        return next;
-      });
-
-      // Persist client-side for 1 hour
-      const expiry = Date.now() + 60 * 60 * 1000;
-      try {
-        sessionStorage.setItem(`analytics_unlock_${selectedLinkId}`, String(expiry));
-      } catch {}
-
-      // Invalidate and refetch unlock status to sync with server
-      await queryClient.invalidateQueries({ queryKey: [`/api/analytics/${selectedLinkId}/unlock-status`] });
-      await refetchUnlockStatus();
-      // Invalidate analytics query to fetch data immediately
-      queryClient.invalidateQueries({ queryKey: ["/api/analytics", selectedLinkId] });
-    } catch (error) {
-      console.error("Failed to unlock analytics:", error);
-    } finally {
-      setIsUnlocking(false);
-    }
-  }
 
   return (
     <div className="min-h-screen py-8 px-4">
@@ -543,6 +532,14 @@ function AnalyticsContent() {
                 Watch a short ad to unlock analytics access for this link for 1 hour. 
                 Get detailed insights about your link performance.
               </p>
+              {unlockMessage && (
+                <p className="text-sm text-muted-foreground mb-4">{unlockMessage}</p>
+              )}
+              {unlockCountdownSeconds > 0 && (
+                <Badge variant="secondary" className="mb-4">
+                  Wait {unlockCountdownSeconds}s in the popunder to unlock
+                </Badge>
+              )}
               <Button
                 size="lg"
                 onClick={handleWatchAd}
@@ -550,7 +547,7 @@ function AnalyticsContent() {
                 data-testid="button-unlock-analytics"
               >
                 <Play className="w-5 h-5 mr-2" />
-                  {isUnlocking ? (unlockCountdownMs > 0 ? `Keep ad open: ${formatCountdown(unlockCountdownMs)}` : "Unlocking...") : "Watch Ad to Unlock (1 hour)"}
+                {isUnlocking ? "Unlocking..." : "Watch Ad to Unlock (1 hour)"}
               </Button>
             </CardContent>
 

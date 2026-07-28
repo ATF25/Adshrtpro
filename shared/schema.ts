@@ -101,17 +101,6 @@ export const insertClickSchema = createInsertSchema(clicks).pick({
 export type InsertClick = z.infer<typeof insertClickSchema>;
 export type Click = typeof clicks.$inferSelect;
 
-// Link unlocks table (records per-link unlocks when needed)
-export const linkUnlocks = pgTable("link_unlocks", {
-  id: varchar("id", { length: 36 }).primaryKey(),
-  linkId: varchar("link_id", { length: 36 }).notNull(),
-  userId: varchar("user_id", { length: 64 }).notNull(),
-  expiry: timestamp("expiry").notNull(),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-export type LinkUnlock = typeof linkUnlocks.$inferSelect;
-
 // Blog posts table
 export const blogPosts = pgTable("blog_posts", {
   id: varchar("id", { length: 36 }).primaryKey(),
