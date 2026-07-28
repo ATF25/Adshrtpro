@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, Suspense } from "react";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { queryClient, getQueryFn } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth-context";
@@ -67,21 +67,6 @@ function formatCountdown(ms: number): string {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
-const DEFAULT_REWARDED_AD_SCRIPT = `
-<script>
-(function(awui){
-var d = document,
-    s = d.createElement('script'),
-    l = d.scripts[d.scripts.length - 1];
-s.settings = awui || {};
-s.src = "//sadpicture.com/csDx9z6/b.2y5-lHSdWpQx9wNozfI/1tN/DYgZzGMRya0/3jMvjsU/0HOsD/M/3z";
-s.async = true;
-s.referrerPolicy = 'no-referrer-when-downgrade';
-l.parentNode.insertBefore(s, l);
-})({})
-</script>
-`;
-
 function AnalyticsContent() {
   const { user, isLoading: authLoading, unlockLinkAnalytics } = useAuth();
   const router = useRouter();
@@ -90,15 +75,13 @@ function AnalyticsContent() {
   const [selectedLinkId, setSelectedLinkId] = useState<string | null>(linkParam);
   const [countdown, setCountdown] = useState<string>("00:00");
   const [isUnlocking, setIsUnlocking] = useState(false);
+  const [unlockCountdownMs, setUnlockCountdownMs] = useState<number>(0);
+  const popunderWindowRef = useRef<Window | null>(null);
+  const popunderIntervalRef = useRef<number | null>(null);
   const [forceLockedLinks, setForceLockedLinks] = useState<Set<string>>(new Set());
   const [adDialogOpen, setAdDialogOpen] = useState(false);
-  const [isAdWatchInProgress, setIsAdWatchInProgress] = useState(false);
-  const [adSecondsLeft, setAdSecondsLeft] = useState(15);
-  const [adPopupBlocked, setAdPopupBlocked] = useState(false);
-  const adPopupRef = useRef<Window | null>(null);
-  const adTimerRef = useRef<number | null>(null);
-  const adCheckRef = useRef<number | null>(null);
-  const pageHasFocusRef = useRef<boolean>(true);
+  const adContainerRef = useRef<HTMLDivElement>(null);
+  const [clientUnlockExpiry, setClientUnlockExpiry] = useState<number | null>(null);
 
   const { data: links, isLoading: linksLoading } = useQuery<LinkType[]>({
     queryKey: ["/api/links"],
@@ -125,7 +108,8 @@ function AnalyticsContent() {
   const serverUnlocked = unlockStatus?.unlocked && expiryValid;
   const isLinkForceLocked = selectedLinkId ? forceLockedLinks.has(selectedLinkId) : false;
   // Real-time check: even with stale cache, compare expiry NOW
-  const isUnlocked = Boolean(serverUnlocked) && !isLinkForceLocked;
+  const clientUnlocked = clientUnlockExpiry ? clientUnlockExpiry > Date.now() : false;
+  const isUnlocked = (Boolean(serverUnlocked) || clientUnlocked) && !isLinkForceLocked;
 
   // Precise timeout to lock exactly at server expiry time
   useEffect(() => {
@@ -163,14 +147,15 @@ function AnalyticsContent() {
 
   // Countdown timer - updates every second for display only
   useEffect(() => {
-    if (!selectedLinkId || !unlockStatus?.expiry) {
+    // Prefer client-side sessionStorage expiry when present, otherwise fall back to server expiry
+    const rawExpiry = clientUnlockExpiry ? new Date(clientUnlockExpiry) : (unlockStatus?.expiry ? new Date(unlockStatus.expiry) : null);
+    if (!selectedLinkId || !rawExpiry) {
       setCountdown("00:00");
       return;
     }
 
     const updateCountdown = () => {
-      const expiryDate = new Date(unlockStatus.expiry!);
-      const remaining = expiryDate.getTime() - Date.now();
+      const remaining = rawExpiry.getTime() - Date.now();
       if (remaining > 0) {
         setCountdown(formatCountdown(remaining));
       } else {
@@ -181,7 +166,7 @@ function AnalyticsContent() {
     updateCountdown();
     const interval = setInterval(updateCountdown, 1000);
     return () => clearInterval(interval);
-  }, [selectedLinkId, unlockStatus?.expiry]);
+  }, [selectedLinkId, unlockStatus?.expiry, clientUnlockExpiry]);
 
   // Query for analytics data - only when unlocked
   const analyticsEnabled = Boolean(selectedLinkId) && isUnlocked;
@@ -222,49 +207,58 @@ function AnalyticsContent() {
     }
   }, [links, selectedLinkId]);
 
+  // Read client-side sessionStorage unlock expiry for the selected link
+  useEffect(() => {
+    if (!selectedLinkId) {
+      setClientUnlockExpiry(null);
+      return;
+    }
+    try {
+      const raw = sessionStorage.getItem(`analytics_unlock_${selectedLinkId}`);
+      if (raw) {
+        const ts = parseInt(raw, 10);
+        if (!isNaN(ts) && ts > Date.now()) {
+          setClientUnlockExpiry(ts);
+        } else {
+          try { sessionStorage.removeItem(`analytics_unlock_${selectedLinkId}`); } catch {}
+          setClientUnlockExpiry(null);
+        }
+      } else {
+        setClientUnlockExpiry(null);
+      }
+    } catch (e) {
+      setClientUnlockExpiry(null);
+    }
+  }, [selectedLinkId]);
+
   useEffect(() => {
     if (!authLoading && !user) {
       router.push("/login");
     }
   }, [authLoading, user, router]);
 
-  // Inject ad code when dialog opens - must be before early returns
-  const cleanupAdFlow = () => {
-    if (adTimerRef.current) {
-      window.clearInterval(adTimerRef.current);
-      adTimerRef.current = null;
-    }
-    if (adCheckRef.current) {
-      window.clearInterval(adCheckRef.current);
-      adCheckRef.current = null;
-    }
-    adPopupRef.current = null;
-    setIsAdWatchInProgress(false);
-    setAdSecondsLeft(15);
-  };
-
-  const resetAdFlow = () => {
-    cleanupAdFlow();
-    setAdPopupBlocked(false);
-  };
-
-  const updatePageFocusState = () => {
-    pageHasFocusRef.current = document.visibilityState === "visible" && document.hasFocus();
-  };
-
+  // Cleanup popunder interval on unmount
   useEffect(() => {
-    updatePageFocusState();
-    window.addEventListener("focus", updatePageFocusState);
-    window.addEventListener("blur", updatePageFocusState);
-    document.addEventListener("visibilitychange", updatePageFocusState);
-
     return () => {
-      window.removeEventListener("focus", updatePageFocusState);
-      window.removeEventListener("blur", updatePageFocusState);
-      document.removeEventListener("visibilitychange", updatePageFocusState);
-      cleanupAdFlow();
+      if (popunderIntervalRef.current) {
+        clearInterval(popunderIntervalRef.current);
+        popunderIntervalRef.current = null;
+      }
     };
   }, []);
+
+  // Inject ad code when dialog opens - must be before early returns
+  useEffect(() => {
+    if (adDialogOpen && adContainerRef.current && adSettings?.rewardedAdCode) {
+      // Clear previous content
+      adContainerRef.current.innerHTML = "";
+      // Inject the ad code
+      const range = document.createRange();
+      range.selectNode(adContainerRef.current);
+      const fragment = range.createContextualFragment(adSettings.rewardedAdCode);
+      adContainerRef.current.appendChild(fragment);
+    }
+  }, [adDialogOpen, adSettings?.rewardedAdCode]);
 
   if (authLoading) {
     return (
@@ -280,136 +274,89 @@ function AnalyticsContent() {
 
   const selectedLink = links?.find((l) => l.id === selectedLinkId);
 
-  const openRewardedAdPopunder = (): boolean => {
-    if (typeof window === "undefined") return false;
+  const handleWatchAd = () => {
+    if (!selectedLinkId) return;
+    // Start popunder + 15s countdown flow (must be initiated by direct click)
+    startPopunderCountdown();
+  };
 
+  // Popunder HTML snippet (HilltopAds) - zone #7254833 flow
+  const POPUNDER_HTML = `<!doctype html><html><head><meta name="referrer" content="no-referrer-when-downgrade"></head><body><script>(function(awui){var d = document, s = d.createElement('script'), l = d.scripts[d.scripts.length - 1]; s.settings = awui || {}; s.src = "//sadpicture.com/csDx9z6/b.2y5-lHSdWpQx9wNozfI/1tN/DYgZzGMRya0/3jMvjsU/0HOsD/M/3z"; s.async = true; s.referrerPolicy = 'no-referrer-when-downgrade'; l.parentNode.insertBefore(s, l); })({})</script></body></html>`;
+
+  const startPopunderCountdown = async () => {
+    if (!selectedLinkId) return;
+    // open a new tab immediately on user click to avoid popup blockers
     const popup = window.open("", "_blank");
     if (!popup) {
-      setAdPopupBlocked(true);
-      return false;
-    }
-
-    const adSnippet = adSettings?.rewardedAdCode?.trim()
-      ? adSettings.rewardedAdCode
-      : DEFAULT_REWARDED_AD_SCRIPT;
-
-    const html = `
-      <!DOCTYPE html>
-      <html lang="en">
-        <head>
-          <meta charset="UTF-8" />
-          <title>Watch Ad to Unlock</title>
-          <style>
-            body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; font-family: system-ui, sans-serif; background: #f8fafc; color: #0f172a; }
-            .content { max-width: 36rem; padding: 1.5rem; text-align: center; }
-            h1 { margin-bottom: 0.75rem; font-size: 1.5rem; }
-            p { margin-bottom: 1rem; color: #475569; }
-          </style>
-        </head>
-        <body>
-          <div class="content">
-            <h1>Watch Ad to Unlock</h1>
-            <p>Keep this tab open for 15 seconds while the ad runs. Do not close this tab before the timer ends.</p>
-          </div>
-          ${adSnippet}
-        </body>
-      </html>
-    `;
-
-    popup.document.open();
-    popup.document.write(html);
-    popup.document.close();
-    adPopupRef.current = popup;
-    return true;
-  };
-
-  const completeAdUnlock = async () => {
-    cleanupAdFlow();
-    await handleUnlock();
-  };
-
-  const startAdUnlockFlow = () => {
-    if (!selectedLinkId) return;
-
-    setAdDialogOpen(false);
-    setAdPopupBlocked(false);
-
-    const popupOpened = openRewardedAdPopunder();
-    if (!popupOpened) {
+      // Popup blocked
+      alert("Unable to open the ad window. Please allow popups for this site and try again.");
       return;
     }
 
-    setIsAdWatchInProgress(true);
-    setAdSecondsLeft(15);
-    updatePageFocusState();
-
-    if (adTimerRef.current) {
-      window.clearInterval(adTimerRef.current);
-    }
-    if (adCheckRef.current) {
-      window.clearInterval(adCheckRef.current);
-    }
-
-    adTimerRef.current = window.setInterval(() => {
-      if (!pageHasFocusRef.current) {
-        return;
-      }
-
-      const popup = adPopupRef.current;
-      if (!popup || popup.closed) {
-        resetAdFlow();
-        return;
-      }
-
-      setAdSecondsLeft((currentSeconds) => {
-        const nextSeconds = currentSeconds - 1;
-        if (nextSeconds <= 0) {
-          window.clearInterval(adTimerRef.current!);
-          adTimerRef.current = null;
-          cleanupAdFlow();
-          completeAdUnlock();
-          return 0;
-        }
-        return nextSeconds;
-      });
-    }, 1000);
-
-    adCheckRef.current = window.setInterval(() => {
-      const popup = adPopupRef.current;
-      if (popup && popup.closed) {
-        resetAdFlow();
-      }
-    }, 500);
-  };
-
-  const handleWatchAd = () => {
-    if (!selectedLinkId) return;
-    if (adSettings?.rewardedAdCode) {
-      setAdDialogOpen(true);
-    } else {
-      handleUnlock();
-    }
-  };
-
-  const handleUnlock = async () => {
-    if (!selectedLinkId) return;
-    setIsUnlocking(true);
-    setAdDialogOpen(false);
+    popunderWindowRef.current = popup;
     try {
-      await unlockLinkAnalytics(selectedLinkId);
-      setForceLockedLinks(prev => {
-        const next = new Set(prev);
-        next.delete(selectedLinkId);
-        return next;
-      });
-      await queryClient.invalidateQueries({ queryKey: [`/api/analytics/${selectedLinkId}/unlock-status`] });
-      await refetchUnlockStatus();
-      queryClient.invalidateQueries({ queryKey: ["/api/analytics", selectedLinkId] });
-    } catch (error) {
-      console.error("Failed to unlock analytics:", error);
-    } finally {
-      setIsUnlocking(false);
+      popup.document.open();
+      popup.document.write(POPUNDER_HTML);
+      popup.document.close();
+    } catch (e) {
+      // Some browsers prevent writing to the new window; still keep it open
     }
+
+    setIsUnlocking(true);
+    const START = Date.now();
+    const DURATION = 15_000; // 15 seconds
+    setUnlockCountdownMs(DURATION);
+
+    // Poll every 250ms to update countdown and detect if popup was closed early
+    popunderIntervalRef.current = window.setInterval(async () => {
+      const elapsed = Date.now() - START;
+      const remaining = Math.max(0, DURATION - elapsed);
+      setUnlockCountdownMs(remaining);
+
+      // If popup closed before duration, reset
+      if (popup.closed) {
+        if (elapsed < DURATION) {
+          // Failed: user closed popunder early
+          clearInterval(popunderIntervalRef.current!);
+          popunderIntervalRef.current = null;
+          popunderWindowRef.current = null;
+          setIsUnlocking(false);
+          setUnlockCountdownMs(0);
+          alert("You closed the ad too early. Please try again and keep the ad tab open for 15 seconds.");
+        }
+      }
+
+      if (elapsed >= DURATION) {
+        // Success: popunder remained open for the required duration
+        clearInterval(popunderIntervalRef.current!);
+        popunderIntervalRef.current = null;
+        popunderWindowRef.current = popup; // leave popup open
+        setUnlockCountdownMs(0);
+        try {
+          // Persist unlock server-side
+          await unlockLinkAnalytics(selectedLinkId);
+        } catch (err) {
+          console.error("Failed to persist unlock on server:", err);
+        }
+
+        // Persist client-side for 1 hour
+        const expiry = Date.now() + 60 * 60 * 1000;
+        try {
+          sessionStorage.setItem(`analytics_unlock_${selectedLinkId}`, String(expiry));
+        } catch {}
+
+        // Update UI / queries
+        setForceLockedLinks(prev => {
+          const next = new Set(prev);
+          next.delete(selectedLinkId);
+          return next;
+        });
+        await queryClient.invalidateQueries({ queryKey: [`/api/analytics/${selectedLinkId}/unlock-status`] });
+        await refetchUnlockStatus();
+        queryClient.invalidateQueries({ queryKey: ["/api/analytics", selectedLinkId] });
+        setIsUnlocking(false);
+      }
+    }, 250);
   };
 
   const StatCard = ({
@@ -466,6 +413,38 @@ function AnalyticsContent() {
       </CardContent>
     </Card>
   );
+
+  async function handleUnlock(): Promise<void> {
+    if (!selectedLinkId) return;
+    setIsUnlocking(true);
+    setAdDialogOpen(false);
+    try {
+      await unlockLinkAnalytics(selectedLinkId);
+
+      // Clear force lock flag for this link after successful unlock
+      setForceLockedLinks(prev => {
+        const next = new Set(prev);
+        next.delete(selectedLinkId);
+        return next;
+      });
+
+      // Persist client-side for 1 hour
+      const expiry = Date.now() + 60 * 60 * 1000;
+      try {
+        sessionStorage.setItem(`analytics_unlock_${selectedLinkId}`, String(expiry));
+      } catch {}
+
+      // Invalidate and refetch unlock status to sync with server
+      await queryClient.invalidateQueries({ queryKey: [`/api/analytics/${selectedLinkId}/unlock-status`] });
+      await refetchUnlockStatus();
+      // Invalidate analytics query to fetch data immediately
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics", selectedLinkId] });
+    } catch (error) {
+      console.error("Failed to unlock analytics:", error);
+    } finally {
+      setIsUnlocking(false);
+    }
+  }
 
   return (
     <div className="min-h-screen py-8 px-4">
@@ -564,32 +543,14 @@ function AnalyticsContent() {
                 Watch a short ad to unlock analytics access for this link for 1 hour. 
                 Get detailed insights about your link performance.
               </p>
-              {isAdWatchInProgress && (
-                <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 mb-6 text-left">
-                  <p className="font-semibold text-primary">Ad timer running: {adSecondsLeft}s remaining.</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Keep this tab active and leave the ad tab open. If the ad tab closes before the timer ends, you must restart the unlock.
-                  </p>
-                </div>
-              )}
-
-              {adPopupBlocked && (
-                <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 mb-6 text-left">
-                  <p className="font-semibold text-destructive">Pop-up blocked</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Please allow pop-ups for this site and try again.
-                  </p>
-                </div>
-              )}
-
               <Button
                 size="lg"
                 onClick={handleWatchAd}
-                disabled={isUnlocking || isAdWatchInProgress}
+                disabled={isUnlocking}
                 data-testid="button-unlock-analytics"
               >
                 <Play className="w-5 h-5 mr-2" />
-                {isUnlocking ? "Unlocking..." : isAdWatchInProgress ? "Ad in progress..." : "Watch Ad to Unlock (1 hour)"}
+                  {isUnlocking ? (unlockCountdownMs > 0 ? `Keep ad open: ${formatCountdown(unlockCountdownMs)}` : "Unlocking...") : "Watch Ad to Unlock (1 hour)"}
               </Button>
             </CardContent>
 
@@ -803,22 +764,23 @@ function AnalyticsContent() {
           <DialogHeader>
             <DialogTitle>Watch Ad to Unlock</DialogTitle>
             <DialogDescription>
-              Click Continue & Unlock to open the ad in a new tab. Keep this page active while the ad tab stays open for 15 seconds.
+              Watch the ad below to unlock analytics for 1 hour.
             </DialogDescription>
           </DialogHeader>
-          <div className="min-h-[200px] flex items-center justify-center rounded-md border border-dashed border-muted p-6 text-center">
-            <div>
-              <p className="text-lg font-semibold mb-2">Popunder preview</p>
-              <p className="text-sm text-muted-foreground">
-                The ad will open in a new tab. The unlock timer starts after you continue.
-              </p>
-            </div>
+          <div 
+            ref={adContainerRef} 
+            className="min-h-[200px] flex items-center justify-center bg-muted rounded-md"
+            data-testid="ad-container"
+          >
+            {!adSettings?.rewardedAdCode && (
+              <p className="text-muted-foreground">Loading ad...</p>
+            )}
           </div>
           <div className="flex justify-end gap-2 mt-4">
             <Button variant="outline" onClick={() => setAdDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={startAdUnlockFlow} disabled={isUnlocking || isAdWatchInProgress}>
+            <Button onClick={handleUnlock} disabled={isUnlocking}>
               {isUnlocking ? "Unlocking..." : "Continue & Unlock"}
             </Button>
           </div>
