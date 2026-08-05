@@ -79,7 +79,7 @@ function AnalyticsContent() {
   const [countdown, setCountdown] = useState<string>("00:00");
   const [unlockCountdownSeconds, setUnlockCountdownSeconds] = useState<number>(0);
   const [unlockMessage, setUnlockMessage] = useState<string | null>(null);
-  const [localUnlockExpiry, setLocalUnlockExpiry] = useState<Date | null>(null);
+  const [localUnlockExpiryMap, setLocalUnlockExpiryMap] = useState<Record<string, Date>>({});
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [forceLockedLinks, setForceLockedLinks] = useState<Set<string>>(new Set());
   const [adDialogOpen, setAdDialogOpen] = useState(false);
@@ -107,17 +107,15 @@ function AnalyticsContent() {
     staleTime: 5000, // Consider data stale after 5 seconds
   });
 
-  // Derive isUnlocked: server must report unlocked, expiry must be in the future, and not force-locked
+  // Derive isUnlocked from the currently selected link's own session expiry.
   const serverExpiry = unlockStatus?.expiry ? new Date(unlockStatus.expiry) : null;
-  const expiryValid = serverExpiry && serverExpiry.getTime() > Date.now();
-  const serverUnlocked = unlockStatus?.unlocked && expiryValid;
-  const localExpiryValid = localUnlockExpiry && localUnlockExpiry.getTime() > Date.now();
-  const effectiveExpiry = serverExpiry ?? localUnlockExpiry;
+  const selectedLinkExpiry = selectedLinkId ? localUnlockExpiryMap[selectedLinkId] ?? null : null;
+  const selectedLinkExpiryValid = selectedLinkExpiry && selectedLinkExpiry.getTime() > Date.now();
+  const effectiveExpiry = selectedLinkExpiry ?? serverExpiry;
   const isLinkForceLocked = selectedLinkId ? forceLockedLinks.has(selectedLinkId) : false;
-  // Real-time check: even with stale cache, compare expiry NOW
-  const isUnlocked = Boolean((serverUnlocked || localExpiryValid)) && !isLinkForceLocked;
+  const isUnlocked = Boolean(selectedLinkExpiryValid) && !isLinkForceLocked;
 
-  // Precise timeout to lock exactly at server or local expiry time
+  // Precise timeout to lock exactly at the selected link's expiry time
   useEffect(() => {
     if (!selectedLinkId || !effectiveExpiry) {
       return;
@@ -255,7 +253,9 @@ function AnalyticsContent() {
     setUnlockMessage("Unlocking analytics. Please wait...");
     try {
       await unlockLinkAnalytics(selectedLinkId);
-      sessionStorage.setItem(`analytics-unlocked-${selectedLinkId}`, new Date(Date.now() + 60 * 60 * 1000).toISOString());
+      const expiry = new Date(Date.now() + 60 * 60 * 1000);
+      sessionStorage.setItem(`analytics-unlocked-${selectedLinkId}`, expiry.toISOString());
+      setLocalUnlockExpiryMap(prev => ({ ...prev, [selectedLinkId]: expiry }));
       setForceLockedLinks(prev => {
         const next = new Set(prev);
         next.delete(selectedLinkId);
@@ -341,13 +341,21 @@ function AnalyticsContent() {
     if (item) {
       const expiry = new Date(item);
       if (expiry.getTime() > Date.now()) {
-        setLocalUnlockExpiry(expiry);
+        setLocalUnlockExpiryMap(prev => ({ ...prev, [selectedLinkId]: expiry }));
       } else {
         sessionStorage.removeItem(`analytics-unlocked-${selectedLinkId}`);
-        setLocalUnlockExpiry(null);
+        setLocalUnlockExpiryMap(prev => {
+          const next = { ...prev };
+          delete next[selectedLinkId];
+          return next;
+        });
       }
     } else {
-      setLocalUnlockExpiry(null);
+      setLocalUnlockExpiryMap(prev => {
+        const next = { ...prev };
+        delete next[selectedLinkId];
+        return next;
+      });
     }
   }, [selectedLinkId]);
 
@@ -533,7 +541,7 @@ function AnalyticsContent() {
                 Get detailed insights about your link performance.
               </p>
               {unlockMessage && (
-                <p className="text-sm text-muted-foreground mb-4">{unlockMessage}</p>
+                <p className="text-sm text-muted-foreground mb-4 font-semibold">{unlockMessage}</p>
               )}
               {unlockCountdownSeconds > 0 && (
                 <Badge variant="secondary" className="mb-4">

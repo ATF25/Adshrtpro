@@ -28,6 +28,7 @@ import {
   Settings,
   BookOpen,
   DollarSign,
+  Megaphone,
 } from "lucide-react";
 import { NotificationBell } from "@/components/notification-bell";
 
@@ -41,6 +42,7 @@ export function Navigation() {
   const navLinks = [
     { href: "/", label: "Home", icon: Link2 },
     { href: "/blog", label: "Blog", icon: BookOpen },
+    { href: "https://advertise.adshrtpro.com/", label: "Advertise", icon: Megaphone },
   ];
 
   const userLinks = user
