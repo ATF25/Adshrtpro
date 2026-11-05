@@ -54,7 +54,7 @@ interface AdSettings {
   rewardedAdCode: string;
 }
 
-const DIRECT_ANALYTICS_UNLOCK_URL = "https://elementarywhole.com/b.3NV/0/PM3UpVvEbWmqV/JLZtDG0p3CM/jEUk0DOZDKMYzEL/TTcWy-N_TUQD4dMkzVcI";
+const DIRECT_ANALYTICS_UNLOCK_URL = "https://uplcm.com/4/12139688";
 const UNLOCK_POPUNDER_SECONDS = 15;
 
 function formatCountdown(ms: number): string {
